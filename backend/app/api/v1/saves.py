@@ -53,6 +53,7 @@ async def get_saved(
         .join(SavedPlace, Place.id == SavedPlace.place_id)
         .where(SavedPlace.user_id == current_user.id)
         .options(selectinload(Place.vibe))
+        .order_by(SavedPlace.saved_at.desc())
     )
     places = (await db.execute(stmt)).scalars().all()
     return places

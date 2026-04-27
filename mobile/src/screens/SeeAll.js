@@ -1,10 +1,13 @@
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, Pressable, Image, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { fetchPlaces } from '../services/api';
+import React, { useMemo, useState } from 'react';
+import { View, Text, FlatList, Pressable, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchPlaces, fetchSaved, savePlace, unsavePlace } from '../services/api';
 import { fonts, radius } from '../constants/theme';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import FadeImage from '../components/FadeImage';
 
 const PRICE = ['', '$', '$$', '$$$', '$$$$'];
 const PLACE_GRADS = [
@@ -15,13 +18,32 @@ const PLACE_GRADS = [
 const gradFor = (id) => PLACE_GRADS[(id - 1) % 8];
 
 export default function SeeAll({ navigation, route }) {
-  const { mood, neighborhood, cityId = 1 } = route.params;
+  const { mood, neighborhood, cityId = 1, userLat, userLng, openNow = false } = route.params;
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { user, token } = useAuth();
+  const queryClient = useQueryClient();
 
   const { data: places = [], isLoading } = useQuery({
-    queryKey: ['seeAll', mood.id, neighborhood],
-    queryFn: () => fetchPlaces(mood.id, cityId, 60, neighborhood),
+    queryKey: ['seeAll', mood.id, neighborhood, userLat, userLng, openNow],
+    queryFn: () => fetchPlaces(mood.id, cityId, 60, neighborhood, userLat, userLng, openNow),
+  });
+
+  const { data: savedPlaces = [] } = useQuery({
+    queryKey: ['saved', user?.id],
+    queryFn: () => fetchSaved(token),
+    enabled: !!token,
+  });
+
+  const savedIds = new Set(savedPlaces.map((p) => p.id));
+
+  const saveMutation = useMutation({
+    mutationFn: ({ placeId, isSaved }) =>
+      isSaved ? unsavePlace(token, placeId) : savePlace(token, placeId),
+    onSuccess: () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      queryClient.invalidateQueries({ queryKey: ['saved', user?.id] });
+    },
   });
 
   return (
@@ -52,11 +74,17 @@ export default function SeeAll({ navigation, route }) {
               onPress={() => navigation.navigate('Detail', { placeId: item.id, mood })}
             >
               <View style={styles.cardImg}>
-                {item.image_url ? (
-                  <Image source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                ) : (
-                  <LinearGradient colors={gradFor(item.id)} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                <LinearGradient colors={gradFor(item.id)} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                {item.image_url && (
+                  <FadeImage source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} />
                 )}
+                <Pressable
+                  style={styles.heartBtn}
+                  onPress={() => saveMutation.mutate({ placeId: item.id, isSaved: savedIds.has(item.id) })}
+                  hitSlop={8}
+                >
+                  <Text style={{ fontSize: 16 }}>{savedIds.has(item.id) ? '❤️' : '🤍'}</Text>
+                </Pressable>
               </View>
               <View style={styles.cardBody}>
                 <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
@@ -85,8 +113,9 @@ function makeStyles(colors) {
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     grid: { paddingHorizontal: 12, paddingBottom: 40 },
     row: { justifyContent: 'space-between', marginBottom: 12 },
-    card: { width: '48.5%', borderRadius: 8, overflow: 'hidden', backgroundColor: colors.bg2 },
+    card: { width: '48.5%', borderRadius: radius.card, overflow: 'hidden', backgroundColor: colors.bg2 },
     cardImg: { height: 120 },
+    heartBtn: { position: 'absolute', top: 6, right: 6 },
     cardBody: { padding: 10, gap: 3 },
     cardName: { fontFamily: fonts.display, fontSize: 14, color: colors.txt, letterSpacing: 0.3 },
     cardSub: { fontSize: 10, color: colors.txt3 },

@@ -3,9 +3,10 @@ import {
   View, Text, StyleSheet, FlatList, Pressable,
   ActivityIndicator, SafeAreaView, StatusBar,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import FadeImage from '../components/FadeImage';
 import { fetchSaved, unsavePlace } from '../services/api';
 import { fonts, radius } from '../constants/theme';
 import StatusRow from '../components/StatusRow';
@@ -36,7 +37,7 @@ export default function Saved({ navigation }) {
   const queryClient = useQueryClient();
   const { user, token } = useAuth();
 
-  const { data: saved = [], isLoading, refetch } = useQuery({
+  const { data: saved = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['saved', user?.id],
     queryFn: () => fetchSaved(token),
     enabled: !!token,
@@ -44,8 +45,23 @@ export default function Saved({ navigation }) {
 
   const unsaveMutation = useMutation({
     mutationFn: (placeId) => unsavePlace(token, placeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved', user?.id] }),
+    onSuccess: () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      queryClient.invalidateQueries({ queryKey: ['saved', user?.id] });
+    },
   });
+
+  if (isError) {
+    return (
+      <SafeAreaView style={[styles.container, styles.errorCenter]}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <Text style={styles.errorTxt}>Couldn't load saves</Text>
+        <Pressable style={styles.retryBtn} onPress={refetch}>
+          <Text style={styles.retryTxt}>TRY AGAIN</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -83,9 +99,9 @@ export default function Saved({ navigation }) {
             <Text style={styles.itemNum}>{String(index + 1).padStart(2, '0')}</Text>
             <View style={styles.itemVisual}>
               <LinearGradient colors={gradFor(item.id)} start={{ x: 0.3, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              {item.image_url ? (
-                <Image source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-              ) : null}
+              {item.image_url && (
+                <FadeImage source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} />
+              )}
             </View>
             <View style={styles.itemInfo}>
               <Text style={styles.itemName} numberOfLines={1}>{item.name.toUpperCase()}</Text>
@@ -144,10 +160,14 @@ function makeStyles(colors) {
     savedSc: { backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 2 },
     savedScTxt: { fontSize: 9, color: colors.txt2 },
     itemArr: { alignItems: 'flex-end', paddingTop: 4 },
-    arrIco: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.glass2, alignItems: 'center', justifyContent: 'center' },
+    arrIco: { width: 22, height: 22, borderRadius: 3, backgroundColor: colors.glass2, alignItems: 'center', justifyContent: 'center' },
 
     center: { paddingTop: 80, alignItems: 'center', gap: 12 },
     emptyTitle: { fontFamily: fonts.display, fontSize: 24, color: colors.txt, letterSpacing: 1 },
     emptyTxt: { fontFamily: fonts.body, fontSize: 13, color: colors.txt2, textAlign: 'center', paddingHorizontal: 40 },
+    errorCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+    errorTxt: { fontFamily: fonts.display, fontSize: 18, color: colors.txt, letterSpacing: 1 },
+    retryBtn: { backgroundColor: colors.sage, borderRadius: 4, paddingHorizontal: 24, paddingVertical: 10 },
+    retryTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: '#fff' },
   });
 }

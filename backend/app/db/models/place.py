@@ -28,6 +28,7 @@ class Place(Base):
     google_place_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, unique=True)
     neighborhood: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     review_snippets: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    opening_hours: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
     city: Mapped["City"] = relationship(back_populates="places")
     vibe: Mapped[Optional["PlaceVibe"]] = relationship(back_populates="place", uselist=False)

@@ -28,7 +28,7 @@ from app.core.config import settings
 
 GOOGLE_API_KEY = settings.GOOGLE_PLACES_API_KEY
 PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
-FIELD_MASK = "places.id,places.displayName,places.rating,places.formattedAddress,places.location,places.priceLevel,places.photos,places.reviews"
+FIELD_MASK = "places.id,places.displayName,places.rating,places.formattedAddress,places.location,places.priceLevel,places.photos,places.reviews,places.regularOpeningHours"
 
 PRICE_LEVEL_MAP = {
     "PRICE_LEVEL_FREE": 1,
@@ -80,6 +80,15 @@ def clean_place_name(name: str) -> str:
 
 
 def build_photo_url(photo_name: str) -> str:
+    # Resolve the 302 redirect immediately so React Native Image gets a direct CDN URL
+    api_url = f"https://places.googleapis.com/v1/{photo_name}/media?maxHeightPx=800&key={GOOGLE_API_KEY}&skipHttpRedirect=true"
+    try:
+        r = httpx.get(api_url, follow_redirects=False, timeout=10)
+        if r.status_code in (301, 302, 303, 307, 308):
+            return r.headers["location"]
+    except Exception:
+        pass
+    # Fallback: store the redirect URL — may still work on some platforms
     return f"https://places.googleapis.com/v1/{photo_name}/media?maxHeightPx=800&key={GOOGLE_API_KEY}"
 
 
@@ -173,6 +182,9 @@ async def ingest(city_name: str, lat: float, lng: float):
                         if r.get("text", {}).get("languageCode", "en") == "en" and r.get("text", {}).get("text")
                     ][:5] or None
 
+                    raw_hours = p.get("regularOpeningHours", {}).get("periods")
+                    opening_hours = raw_hours if isinstance(raw_hours, list) else None
+
                     place = Place(
                         city_id=city_id,
                         name=name,
@@ -184,6 +196,7 @@ async def ingest(city_name: str, lat: float, lng: float):
                         image_url=image_url,
                         google_place_id=gid,
                         review_snippets=snippets,
+                        opening_hours=opening_hours,
                     )
                     db.add(place)
                     inserted += 1

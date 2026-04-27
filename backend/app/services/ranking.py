@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 from typing import Optional
 
 MOOD_VECTORS: dict[str, dict[str, float]] = {
@@ -49,6 +50,56 @@ def _cosine(mood_vec: dict, place_vec: dict) -> float:
     return dot / (denom + 1e-9)
 
 
+def _time_adjust(vibe_vec: dict, hour: int) -> dict:
+    """Boost/dampen a place's vibe dimensions based on time of day.
+    Applied to the place vector, not the mood vector — reflects how the place
+    actually feels at this hour (a cafe IS calmer at 9am, livelier at 9pm)."""
+    adj = dict(vibe_vec)
+    if 5 <= hour < 11:  # morning
+        adj['calm']          = min(1.0, adj.get('calm', 0) * 1.25)
+        adj['work_friendly'] = min(1.0, adj.get('work_friendly', 0) * 1.2)
+        adj['lively']        = adj.get('lively', 0) * 0.75
+        adj['social']        = adj.get('social', 0) * 0.85
+    elif hour >= 18 or hour < 3:  # evening / late night
+        adj['social']        = min(1.0, adj.get('social', 0) * 1.25)
+        adj['lively']        = min(1.0, adj.get('lively', 0) * 1.25)
+        adj['date_friendly'] = min(1.0, adj.get('date_friendly', 0) * 1.2)
+        adj['calm']          = adj.get('calm', 0) * 0.8
+        adj['work_friendly'] = adj.get('work_friendly', 0) * 0.7
+    # midday (11–18): no adjustment — baseline vibe vector is most accurate
+    return adj
+
+
+def is_open_now(periods: list | None) -> bool:
+    """Return True if the place is currently open based on stored opening hours.
+    Returns True when periods is None/empty (unknown = don't filter out)."""
+    if not periods:
+        return True
+    now = datetime.now()
+    # Google day encoding: 0=Sunday … 6=Saturday
+    google_day = (now.weekday() + 1) % 7
+    current_mins = now.hour * 60 + now.minute
+    for period in periods:
+        try:
+            o_day  = period["open"]["day"]
+            o_mins = period["open"]["hour"] * 60 + period["open"].get("minute", 0)
+            c_day  = period["close"]["day"]
+            c_mins = period["close"]["hour"] * 60 + period["close"].get("minute", 0)
+            if o_day == google_day:
+                if c_day == google_day:
+                    if o_mins <= current_mins <= c_mins:
+                        return True
+                else:  # closes next day (late night slot)
+                    if current_mins >= o_mins:
+                        return True
+            elif c_day == google_day:  # opened yesterday
+                if current_mins <= c_mins:
+                    return True
+        except (KeyError, TypeError):
+            continue
+    return False
+
+
 def _distance_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
@@ -62,21 +113,34 @@ def rank_places(
     mood: str,
     user_lat: Optional[float] = None,
     user_lng: Optional[float] = None,
+    hour: Optional[int] = None,
+    feedback: Optional[dict] = None,
 ) -> list:
+    """
+    feedback: {place_id: felt_right (bool)} — personalises scores based on
+    the user's past vibe-check votes for this mood.
+    felt_right=True  → +0.08 (they loved the vibe match)
+    felt_right=False → -0.08 (the vibe didn't feel right)
+    """
     mood_key = mood.lower().replace(" ", "_")
     mood_vec = MOOD_VECTORS.get(mood_key, MOOD_VECTORS["calm"])
+    current_hour = hour if hour is not None else datetime.now().hour
+    fb = feedback or {}
     results = []
     for place, vibe in rows:
         if vibe is None:
             score = 0.0
         else:
-            vm = _cosine(mood_vec, vibe.vibe_vector)
+            adjusted_vec = _time_adjust(vibe.vibe_vector, current_hour)
+            vm = _cosine(mood_vec, adjusted_vec)
             rating_norm = place.rating / 5.0
             price_fit = 1.0 - abs(place.price_range - 2) / 4.0
             score = 0.55 * vm + 0.20 * rating_norm + 0.15 * vibe.hype_score + 0.10 * price_fit
             if user_lat is not None and user_lng is not None:
                 dist = _distance_km(user_lat, user_lng, place.lat, place.lng)
                 score += 0.10 * (1.0 / (1.0 + dist))
+            if place.id in fb:
+                score += 0.08 if fb[place.id] else -0.08
         results.append((place, vibe, round(score, 4)))
     results.sort(key=lambda x: x[2], reverse=True)
     return results

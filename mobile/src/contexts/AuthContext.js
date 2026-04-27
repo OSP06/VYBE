@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { fetchMe, loginUser, registerUser } from '../services/api';
+import { fetchMe, loginUser, registerUser, updateMe, setUnauthorizedHandler } from '../services/api';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'vybe_token';
@@ -9,6 +9,17 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const logout = async () => {
+    await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+    setToken(null);
+    setUser(null);
+  };
+
+  // Wire the axios 401 interceptor to call logout so expired tokens auto-clear
+  useEffect(() => {
+    setUnauthorizedHandler(logout);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -43,14 +54,13 @@ export function AuthProvider({ children }) {
     setUser(me);
   };
 
-  const logout = async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
-    setToken(null);
-    setUser(null);
+  const updateUser = async (displayName) => {
+    const updated = await updateMe(token, displayName);
+    setUser(updated);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, SafeAreaView,
-  StatusBar, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable,
+  SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +17,7 @@ export default function Register({ navigation }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [focused, setFocused] = useState(null);
 
   const handleRegister = async () => {
     if (!email.trim() || !password) { setError('Email and password are required'); return; }
@@ -32,70 +33,91 @@ export default function Register({ navigation }) {
     }
   };
 
+  const inputStyle = (name) => [
+    styles.input,
+    focused === name && { borderColor: colors.sage },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <View style={styles.inner}>
-        <Text style={styles.eyebrow}>MOOD-FIRST DISCOVERY</Text>
-        <Text style={styles.title}>JOIN{'\n'}VYBE</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.inner}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.eyebrow}>MOOD-FIRST DISCOVERY</Text>
+          <Text style={styles.title}>JOIN{'\n'}VYBE</Text>
 
-        <View style={styles.form}>
-          <View style={styles.field}>
-            <Text style={styles.label}>YOUR NAME (OPTIONAL)</Text>
-            <TextInput
-              style={styles.input}
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="e.g. Sana Rawat"
-              placeholderTextColor={colors.txt3}
-              autoCapitalize="words"
-              autoComplete="name"
-            />
+          <View style={styles.form}>
+            <View style={styles.field}>
+              <Text style={styles.label}>YOUR NAME (OPTIONAL)</Text>
+              <TextInput
+                style={inputStyle('name')}
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder="e.g. Sana Rawat"
+                placeholderTextColor={colors.txt3}
+                autoCapitalize="words"
+                autoComplete="name"
+                onFocus={() => setFocused('name')}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>EMAIL</Text>
+              <TextInput
+                style={inputStyle('email')}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                placeholderTextColor={colors.txt3}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                onFocus={() => setFocused('email')}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>PASSWORD</Text>
+              <TextInput
+                style={inputStyle('password')}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="min. 6 characters"
+                placeholderTextColor={colors.txt3}
+                secureTextEntry
+                autoComplete="new-password"
+                onFocus={() => setFocused('password')}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
+
+            {!!error && <Text style={styles.error}>{error}</Text>}
+
+            <Pressable style={styles.btn} onPress={handleRegister} disabled={loading}>
+              {loading
+                ? <ActivityIndicator color={colors.bg} />
+                : <Text style={styles.btnTxt}>START VYBING</Text>}
+            </Pressable>
+
+            <Pressable style={styles.link} onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.linkTxt}>
+                ALREADY A VYBER?{'  '}
+                <Text style={styles.linkAcc}>SIGN IN</Text>
+              </Text>
+            </Pressable>
           </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>EMAIL</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.txt3}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>PASSWORD</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="min. 6 characters"
-              placeholderTextColor={colors.txt3}
-              secureTextEntry
-              autoComplete="new-password"
-            />
-          </View>
-
-          {!!error && <Text style={styles.error}>{error}</Text>}
-
-          <Pressable style={styles.btn} onPress={handleRegister} disabled={loading}>
-            {loading
-              ? <ActivityIndicator color={colors.bg} />
-              : <Text style={styles.btnTxt}>START VYBING</Text>}
-          </Pressable>
-
-          <Pressable style={styles.link} onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.linkTxt}>
-              ALREADY A VYBER?{'  '}
-              <Text style={styles.linkAcc}>SIGN IN</Text>
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -103,7 +125,7 @@ export default function Register({ navigation }) {
 function makeStyles(colors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
-    inner: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48 },
+    inner: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 48, paddingTop: 24 },
     eyebrow: { fontSize: 9, fontWeight: '700', letterSpacing: 3, color: colors.sage, marginBottom: 10 },
     title: { fontFamily: fonts.display, fontSize: 54, color: colors.txt, letterSpacing: 1, lineHeight: 50, marginBottom: 44 },
     form: { gap: 14 },

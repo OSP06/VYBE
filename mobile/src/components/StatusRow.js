@@ -1,12 +1,21 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { fonts } from '../constants/theme';
 import { useTheme } from '../contexts/ThemeContext';
 
+function getTime() {
+  const d = new Date();
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 export default function StatusRow({ paddingTop = 10 }) {
   const { colors, isDark, toggleTheme } = useTheme();
-  const d = new Date();
-  const t = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const [t, setT] = useState(getTime);
+
+  useEffect(() => {
+    const id = setInterval(() => setT(getTime()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const borderCol = isDark ? 'rgba(255,255,255,0.13)' : 'rgba(26,24,20,0.13)';
   const divCol    = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(26,24,20,0.09)';

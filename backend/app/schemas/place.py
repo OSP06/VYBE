@@ -35,6 +35,7 @@ class PlaceSchema(BaseModel):
     address: str
     image_url: Optional[str] = None
     neighborhood: Optional[str] = None
+    opening_hours: Optional[list] = None
     vibe: Optional[PlaceVibeSchema] = None
     score: Optional[float] = None
 

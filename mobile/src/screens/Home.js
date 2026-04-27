@@ -4,6 +4,7 @@ import {
   ActivityIndicator, SafeAreaView, ScrollView, StatusBar,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { fetchPlaces, fetchCities, fetchNeighborhoods, savePlace, unsavePlace, fetchSaved } from '../services/api';
 import { fonts, radius } from '../constants/theme';
@@ -20,6 +21,7 @@ export default function Home({ navigation, route }) {
   const [activeMood, setActiveMood] = useState(route.params.mood);
   const [neighborhood, setNeighborhood] = useState(null);
   const [showAreaPicker, setShowAreaPicker] = useState(false);
+  const [openNow, setOpenNow] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(false);
   const queryClient = useQueryClient();
@@ -49,8 +51,8 @@ export default function Home({ navigation, route }) {
   });
 
   const { data: places = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['places', activeMood.id, neighborhood, userLocation?.lat],
-    queryFn: () => fetchPlaces(activeMood.id, city?.id ?? 1, 20, neighborhood, userLocation?.lat, userLocation?.lng),
+    queryKey: ['places', activeMood.id, neighborhood, userLocation?.lat, openNow],
+    queryFn: () => fetchPlaces(activeMood.id, city?.id ?? 1, 20, neighborhood, userLocation?.lat, userLocation?.lng, openNow),
   });
 
   const { data: savedPlaces = [] } = useQuery({
@@ -64,7 +66,10 @@ export default function Home({ navigation, route }) {
   const saveMutation = useMutation({
     mutationFn: ({ placeId, isSaved }) =>
       isSaved ? unsavePlace(token, placeId) : savePlace(token, placeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved', user?.id] }),
+    onSuccess: () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      queryClient.invalidateQueries({ queryKey: ['saved', user?.id] });
+    },
   });
 
   const handleSave = (placeId) => {
@@ -87,7 +92,12 @@ export default function Home({ navigation, route }) {
             </View>
           )}
         </Pressable>
-        {userLocation && <Text style={styles.locDot}>● LIVE</Text>}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {userLocation && <Text style={styles.locDot}>● LIVE</Text>}
+          <Pressable onPress={refetch} hitSlop={10} style={styles.refreshBtn}>
+            <Text style={styles.refreshIco}>↻</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Area picker modal */}
@@ -102,7 +112,7 @@ export default function Home({ navigation, route }) {
               >
                 <Text style={[styles.areaOptionTxt, !neighborhood && styles.areaOptionTxtOn]}>All of {city?.name}</Text>
               </Pressable>
-              {neighborhoods.filter(n => n !== 'San Francisco').map((n) => (
+              {neighborhoods.filter(n => n !== city?.name).map((n) => (
                 <Pressable
                   key={n}
                   style={[styles.areaOption, neighborhood === n && styles.areaOptionOn]}
@@ -131,6 +141,18 @@ export default function Home({ navigation, route }) {
         </ScrollView>
       </View>
 
+      <View style={styles.rankBadgeRow}>
+        <Text style={styles.rankBadgeTxt}>RANKED BY VIBE FIT · NOT STARS</Text>
+        <Pressable
+          style={[styles.openNowChip, openNow && styles.openNowChipOn]}
+          onPress={() => setOpenNow(o => !o)}
+        >
+          <Text style={[styles.openNowTxt, openNow && styles.openNowTxtOn]}>
+            {openNow ? '● OPEN NOW' : '○ OPEN NOW'}
+          </Text>
+        </Pressable>
+      </View>
+
       {/* Swipe stack */}
       <View style={{ flex: 1 }}>
         {isLoading ? (
@@ -157,7 +179,7 @@ export default function Home({ navigation, route }) {
             savedIds={savedIds}
             onPress={(place) => navigation.navigate('Detail', { placeId: place.id, mood: activeMood })}
             onSave={handleSave}
-            onSeeAll={() => navigation.navigate('SeeAll', { mood: activeMood, neighborhood, cityId: city?.id ?? 1 })}
+            onSeeAll={() => navigation.navigate('SeeAll', { mood: activeMood, neighborhood, cityId: city?.id ?? 1, userLat: userLocation?.lat, userLng: userLocation?.lng, openNow })}
           />
         )}
       </View>
@@ -165,7 +187,7 @@ export default function Home({ navigation, route }) {
       {!isLoading && places.length > 0 && (
         <Pressable
           style={styles.seeAllBar}
-          onPress={() => navigation.navigate('SeeAll', { mood: activeMood, neighborhood, cityId: city?.id ?? 1 })}
+          onPress={() => navigation.navigate('SeeAll', { mood: activeMood, neighborhood, cityId: city?.id ?? 1, userLat: userLocation?.lat, userLng: userLocation?.lng, openNow })}
         >
           <Text style={styles.seeAllTxt}>SEE ALL {activeMood.label.toUpperCase()} PLACES{neighborhood ? ` IN ${neighborhood.toUpperCase()}` : ''} →</Text>
         </Pressable>
@@ -186,6 +208,8 @@ function makeStyles(colors) {
     neighborhoodBadge: { backgroundColor: colors.gold, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 2 },
     neighborhoodBadgeTxt: { fontFamily: fonts.display, fontSize: 9, color: '#fff', letterSpacing: 1 },
     locDot: { fontSize: 8, color: colors.sage, fontWeight: '700', letterSpacing: 1 },
+    refreshBtn: { padding: 2 },
+    refreshIco: { fontSize: 14, color: colors.txt3 },
 
     // Area picker modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
@@ -211,6 +235,13 @@ function makeStyles(colors) {
     retryTxt: { fontFamily: fonts.display, fontSize: 12, color: colors.txt, letterSpacing: 1 },
     emptyTitle: { fontFamily: fonts.display, fontSize: 22, color: colors.txt },
     emptyTxt: { fontSize: 12, color: colors.txt3 },
+
+    rankBadgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 4 },
+    rankBadgeTxt: { fontSize: 8, fontWeight: '700', letterSpacing: 2, color: colors.txt3 },
+    openNowChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 3, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.glass },
+    openNowChipOn: { backgroundColor: colors.sage, borderColor: colors.sage },
+    openNowTxt: { fontSize: 8, fontWeight: '700', letterSpacing: 1, color: colors.txt3 },
+    openNowTxtOn: { color: '#fff' },
 
     seeAllBar: { paddingVertical: 14, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border2, backgroundColor: colors.bg },
     seeAllTxt: { fontFamily: fonts.display, fontSize: 12, color: colors.sage, letterSpacing: 1.5 },

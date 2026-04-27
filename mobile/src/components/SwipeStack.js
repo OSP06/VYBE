@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, Animated, PanResponder, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Animated, PanResponder, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { fonts } from '../constants/theme';
+import { fonts, radius } from '../constants/theme';
+import FadeImage from './FadeImage';
 
 const PLACE_GRADS = [
   ['#c8ddd0', '#6b8f5e'], ['#e0d0ec', '#b09ac0'], ['#f0d8c0', '#e8c4a0'],
@@ -24,6 +26,7 @@ function topVibes(vv, n = 3) {
 
 export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave, colors }) {
   const [index, setIndex] = useState(0);
+  const [imgError, setImgError] = useState(false);
   const pan = useRef(new Animated.ValueXY()).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -38,9 +41,12 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
 
   useEffect(() => {
     setIndex(0);
+    setImgError(false);
     pan.setValue({ x: 0, y: 0 });
     opacity.setValue(1);
   }, [places]);
+
+  useEffect(() => { setImgError(false); }, [index]);
 
   const dismiss = (toX, toY) => {
     Animated.parallel([
@@ -61,7 +67,10 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
     onPanResponderRelease: (_, g) => {
       if (g.dx > 80) {
         // Right swipe — save + dismiss
-        if (topPlaceRef.current) onSaveRef.current(topPlaceRef.current.id);
+        if (topPlaceRef.current) {
+          onSaveRef.current(topPlaceRef.current.id);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
         dismissRef.current(600, g.dy * 0.3);
       } else if (g.dx < -80) {
         dismissRef.current(-600, g.dy * 0.3);
@@ -120,10 +129,13 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
       >
         {/* Photo */}
         <View style={styles.cardImg}>
-          {place.image_url ? (
-            <Image source={{ uri: place.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-          ) : (
-            <LinearGradient colors={gradFor(place.id)} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          <LinearGradient colors={gradFor(place.id)} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          {place.image_url && !imgError && (
+            <FadeImage
+              source={{ uri: place.image_url }}
+              style={StyleSheet.absoluteFill}
+              onError={() => setImgError(true)}
+            />
           )}
           <View style={styles.cardImgOverlay} />
 
@@ -136,7 +148,7 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
           </Animated.View>
 
           {/* Heart button */}
-          <Pressable style={styles.cardHeart} onPress={() => onSave(place.id)}>
+          <Pressable style={styles.cardHeart} onPress={() => { onSave(place.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}>
             <Text style={{ fontSize: 22 }}>{savedIds.has(place.id) ? '❤️' : '🤍'}</Text>
           </Pressable>
 
@@ -148,7 +160,7 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
 
         {/* Info — fills remaining card height */}
         <View style={styles.cardBody}>
-          <Text style={[styles.cardName, { color: colors.txt }]} numberOfLines={1}>{place.name}</Text>
+          <Text style={[styles.cardName, { color: colors.txt }]} numberOfLines={2}>{place.name}</Text>
           {place.neighborhood && (
             <Text style={[styles.cardNeighborhood, { color: colors.txt3 }]}>📍 {place.neighborhood}</Text>
           )}
@@ -173,8 +185,8 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
             </Pressable>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={[styles.cardPrice, { color: colors.txt2 }]}>{PRICE[place.price_range]}</Text>
-              {place.score > 0 && (
-                <Text style={[styles.cardMatch, { color: colors.sage }]}>{Math.round(place.score * 100)}% match</Text>
+              {place.score >= 0.55 && (
+                <Text style={[styles.cardMatch, { color: colors.sage }]}>{Math.round(place.score * 100)}% VIBE MATCH</Text>
               )}
             </View>
           </View>
@@ -194,10 +206,10 @@ function makeStyles(colors) {
     card: {
       position: 'absolute',
       width: '100%', height: '94%',
-      borderRadius: 14,
+      borderRadius: radius.card,
       backgroundColor: colors?.bg || '#F2EDE6',
-      shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.18, shadowRadius: 16, elevation: 10,
+      shadowColor: '#A67C52', shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
       overflow: 'hidden',
       flexDirection: 'column',
     },
@@ -208,27 +220,27 @@ function makeStyles(colors) {
 
     swipeLabelLeft: {
       position: 'absolute', top: 22, left: 18,
-      borderWidth: 2.5, borderColor: '#E74C3C', borderRadius: 6,
+      borderWidth: 2.5, borderColor: '#C25B4E', borderRadius: radius.card,
       paddingHorizontal: 12, paddingVertical: 5,
     },
-    swipeLabelTxtSkip: { fontFamily: fonts.display, fontSize: 18, color: '#E74C3C', letterSpacing: 2 },
+    swipeLabelTxtSkip: { fontFamily: fonts.display, fontSize: 18, color: '#C25B4E', letterSpacing: 2 },
     swipeLabelRight: {
       position: 'absolute', top: 22, right: 18,
-      borderWidth: 2.5, borderColor: '#27AE60', borderRadius: 6,
+      borderWidth: 2.5, borderColor: colors?.sage || '#6B8F5E', borderRadius: radius.card,
       paddingHorizontal: 12, paddingVertical: 5,
     },
-    swipeLabelTxtSave: { fontFamily: fonts.display, fontSize: 18, color: '#27AE60', letterSpacing: 2 },
+    swipeLabelTxtSave: { fontFamily: fonts.display, fontSize: 18, color: colors?.sage || '#6B8F5E', letterSpacing: 2 },
 
     cardHeart: { position: 'absolute', top: 14, right: 14 },
     ratingPill: {
       position: 'absolute', bottom: 12, left: 14,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
+      backgroundColor: 'rgba(0,0,0,0.62)',
+      paddingHorizontal: 12, paddingVertical: 5, borderRadius: radius.card,
     },
     ratingTxt: { fontSize: 12, fontWeight: '700' },
 
     cardBody: { flex: 1, padding: 18, gap: 8, justifyContent: 'space-between' },
-    cardName: { fontFamily: fonts.display, fontSize: 26, letterSpacing: 0.5, lineHeight: 28 },
+    cardName: { fontFamily: fonts.display, fontSize: 26, letterSpacing: 0.5, lineHeight: 26 },
     cardNeighborhood: { fontSize: 12, marginTop: -4 },
     cardSummary: { fontSize: 12, lineHeight: 18 },
     cardChips: { flexDirection: 'row', gap: 6 },
@@ -239,23 +251,23 @@ function makeStyles(colors) {
     seeMoreBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 10,
       backgroundColor: colors?.txt || '#1A1814',
-      borderRadius: 8, paddingHorizontal: 20, paddingVertical: 13,
+      borderRadius: radius.card, paddingHorizontal: 20, paddingVertical: 13,
     },
     seeMoreTxt: { fontFamily: fonts.display, fontSize: 15, color: colors?.bg || '#F2EDE6', letterSpacing: 1.5 },
     seeMoreArrow: {
-      width: 24, height: 24, borderRadius: 12,
+      width: 24, height: 24, borderRadius: radius.card,
       backgroundColor: colors?.txt2 || '#7A7060',
       alignItems: 'center', justifyContent: 'center',
     },
     cardPrice: { fontSize: 13, fontWeight: '600' },
     cardMatch: { fontSize: 12, fontWeight: '700', marginTop: 2 },
 
-    hint: { position: 'absolute', bottom: 2, fontSize: 9, letterSpacing: 1.5 },
+    hint: { position: 'absolute', bottom: 4, fontSize: 10, letterSpacing: 2, opacity: 0.45 },
 
     emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     emptyTitle: { fontFamily: fonts.display, fontSize: 26, color: colors?.txt || '#1A1814', letterSpacing: 1 },
     emptySub: { fontSize: 13, color: colors?.txt3 || '#AEA090' },
-    seeAllBtn: { marginTop: 8, paddingHorizontal: 28, paddingVertical: 14, backgroundColor: colors?.sage || '#6B8F5E', borderRadius: 30 },
+    seeAllBtn: { marginTop: 8, paddingHorizontal: 28, paddingVertical: 14, backgroundColor: colors?.sage || '#6B8F5E', borderRadius: radius.card },
     seeAllTxt: { fontFamily: fonts.display, fontSize: 15, color: '#fff', letterSpacing: 2 },
   });
 }
