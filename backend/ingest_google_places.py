@@ -28,7 +28,7 @@ from app.core.config import settings
 
 GOOGLE_API_KEY = settings.GOOGLE_PLACES_API_KEY
 PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
-FIELD_MASK = "places.id,places.displayName,places.rating,places.formattedAddress,places.location,places.priceLevel,places.photos"
+FIELD_MASK = "places.id,places.displayName,places.rating,places.formattedAddress,places.location,places.priceLevel,places.photos,places.reviews"
 
 PRICE_LEVEL_MAP = {
     "PRICE_LEVEL_FREE": 1,
@@ -167,6 +167,12 @@ async def ingest(city_name: str, lat: float, lng: float):
                     photos = p.get("photos", [])
                     image_url = build_photo_url(photos[0]["name"]) if photos else None
 
+                    raw_reviews = p.get("reviews", [])
+                    snippets = [
+                        r["text"]["text"] for r in raw_reviews
+                        if r.get("text", {}).get("languageCode", "en") == "en" and r.get("text", {}).get("text")
+                    ][:5] or None
+
                     place = Place(
                         city_id=city_id,
                         name=name,
@@ -177,6 +183,7 @@ async def ingest(city_name: str, lat: float, lng: float):
                         address=address,
                         image_url=image_url,
                         google_place_id=gid,
+                        review_snippets=snippets,
                     )
                     db.add(place)
                     inserted += 1

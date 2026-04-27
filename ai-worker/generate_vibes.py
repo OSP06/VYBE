@@ -2,12 +2,14 @@
 AI Worker — generates vibe vectors for all places using GPT-4o-mini.
 
 Usage:
-  cd ai-worker
-  pip install -r requirements.txt
-  OPENAI_API_KEY=sk-... DATABASE_URL=postgresql+asyncpg://vybe:vybe@localhost:5432/vybe python generate_vibes.py
+  python ai-worker/generate_vibes.py
+  python ai-worker/generate_vibes.py --regenerate   # re-score even existing vibes
 
-Idempotent: skips places that already have a vibe entry.
+Idempotent by default: skips places that already have a vibe entry.
+--regenerate deletes existing vibes and re-scores from scratch (useful after
+running enrich_reviews.py to get review-calibrated scores).
 """
+import argparse
 import asyncio
 import json
 import os
@@ -17,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -29,9 +31,17 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://vybe:vybe@lo
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 
-def build_prompt(name: str, address: str) -> str:
-    return f"""You are a place vibe analyst for a mood-based discovery app in India.
-Analyze "{name}" located at "{address}" in Ahmedabad, India.
+def build_prompt(name: str, address: str, reviews: list | None = None) -> str:
+    review_block = ""
+    if reviews:
+        joined = "\n".join(f'- "{r[:300]}"' for r in reviews[:8])
+        review_block = (
+            f"\n\nReal user reviews (use these to calibrate your scores — "
+            f"they reflect what people actually experience):\n{joined}"
+        )
+
+    return f"""You are a place vibe analyst for a mood-based discovery app.
+Analyze "{name}" located at "{address}".{review_block}
 
 Return ONLY valid JSON — no markdown, no explanation:
 {{
@@ -65,14 +75,14 @@ Dimension definitions:
 async def get_vibe(client: AsyncOpenAI, place: Place) -> dict:
     response = await client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": build_prompt(place.name, place.address)}],
+        messages=[{"role": "user", "content": build_prompt(place.name, place.address, place.review_snippets)}],
         temperature=0.3,
         response_format={"type": "json_object"},
     )
     return json.loads(response.choices[0].message.content)
 
 
-async def main():
+async def main(regenerate: bool):
     if not OPENAI_API_KEY:
         print("ERROR: OPENAI_API_KEY not set. Export it or add to ../.env")
         sys.exit(1)
@@ -84,14 +94,20 @@ async def main():
     async with Session() as db:
         places = (await db.execute(select(Place))).scalars().all()
         print(f"Found {len(places)} places to process")
+        if regenerate:
+            print("--regenerate: deleting all existing vibe rows first")
+            await db.execute(delete(PlaceVibe))
+            await db.commit()
 
         for place in places:
-            existing = await db.get(PlaceVibe, place.id)
-            if existing:
-                print(f"  SKIP  {place.name} (already has vibe)")
-                continue
+            if not regenerate:
+                existing = await db.get(PlaceVibe, place.id)
+                if existing:
+                    print(f"  SKIP  {place.name} (already has vibe)")
+                    continue
 
-            print(f"  PROC  {place.name}...")
+            has_reviews = bool(place.review_snippets)
+            print(f"  PROC  {place.name}{'  [+reviews]' if has_reviews else ''}...")
             try:
                 data = await get_vibe(client, place)
                 vibe = PlaceVibe(
@@ -112,4 +128,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Delete existing vibe rows and re-score all places from scratch",
+    )
+    args = parser.parse_args()
+    asyncio.run(main(args.regenerate))
