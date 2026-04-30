@@ -142,7 +142,7 @@ export default function Onboarding({ navigation }) {
                 <MoodChip mood={mood} selected={selectedMood?.id === mood.id} onPress={setSelectedMood} />
               </View>
             ))}
-            <View style={{ height: 120 }} />
+            <View style={{ height: 200 }} />
           </ScrollView>
 
           {selectedMood && (

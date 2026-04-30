@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable,
+  View, Text, StyleSheet, Pressable,
   ActivityIndicator, SafeAreaView, StatusBar,
-  Linking, Platform,
+  Linking, Platform, Animated,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import FadeImage from '../components/FadeImage';
@@ -53,7 +53,7 @@ function parseHours(periods) {
 
 const VIBE_LABELS = {
   calm: 'CALM', aesthetic: 'AESTHETIC', lively: 'LIVELY', social: 'SOCIAL',
-  premium: 'PREMIUM', budget: 'BUDGET', work_friendly: 'WORK', date_friendly: 'DATE',
+  premium: 'PREMIUM', budget: 'BUDGET', work_friendly: 'WORK', date_friendly: 'ROMANTIC',
 };
 
 const PLACE_GRADS = [
@@ -82,6 +82,10 @@ export default function Detail({ navigation, route }) {
   const [verifyDone, setVerifyDone] = useState(false);
   const [showAllHours, setShowAllHours] = useState(false);
   const fromSaved = !route.params?.mood;
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const heroOpacity = scrollY.interpolate({ inputRange: [0, 160], outputRange: [1, 0], extrapolate: 'clamp' });
+  const heroParallax = scrollY.interpolate({ inputRange: [0, 260], outputRange: [0, -55], extrapolate: 'clamp' });
 
   const { data: place, isLoading, isError, refetch } = useQuery({
     queryKey: ['place', placeId],
@@ -152,25 +156,34 @@ export default function Detail({ navigation, route }) {
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {place.image_url ? (
-        <View style={styles.heroImgWrap}>
-          <FadeImage source={{ uri: place.image_url }} style={styles.heroImg} />
-          <View style={styles.heroImgOverlay} />
-        </View>
-      ) : (
-        <MoodHero
-          moodId={route.params?.mood?.id || 'calm'}
-          gradColors={gradFor(place.id)}
-          height={260}
-        />
-      )}
+      {/* Hero — fades and parallaxes as sheet scrolls up */}
+      <Animated.View style={[styles.heroImgWrap, { opacity: heroOpacity, transform: [{ translateY: heroParallax }] }]}>
+        {place.image_url ? (
+          <>
+            <FadeImage source={{ uri: place.image_url }} style={styles.heroImg} />
+            <View style={styles.heroImgOverlay} />
+          </>
+        ) : (
+          <MoodHero
+            moodId={route.params?.mood?.id || 'calm'}
+            gradColors={gradFor(place.id)}
+            height={270}
+          />
+        )}
+      </Animated.View>
 
-      <ScrollView
-        style={styles.detSheet}
+      {/* Full-screen scrollable sheet — transparent spacer exposes image behind */}
+      <Animated.ScrollView
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]}
         contentContainerStyle={styles.detSheetContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
       >
-        <View style={{ height: 28 }} />
+        <View style={styles.heroSpacer} />
         <View style={styles.detSheetInner}>
           <View style={styles.detPill} />
           <View style={styles.detBody}>
@@ -201,9 +214,7 @@ export default function Detail({ navigation, route }) {
                         <Text style={styles.todayHours}>{hours.byDay[hours.todayDay]} {showAllHours ? '▴' : '▾'}</Text>
                       )}
                     </Pressable>
-                  ) : (
-                    <Text style={styles.hoursUnavailable}>Hours unavailable</Text>
-                  )}
+                  ) : null}
                   <Pressable style={styles.directionsBtn} onPress={openDirections}>
                     <Text style={styles.directionsTxt}>DIRECTIONS →</Text>
                   </Pressable>
@@ -302,7 +313,7 @@ export default function Detail({ navigation, route }) {
             <View style={{ height: 160 }} />
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Floating action bar — glassmorphism */}
       <View style={styles.fabBar}>
@@ -334,15 +345,15 @@ function makeStyles(colors, isDark) {
     backLink: { paddingVertical: 8 },
     backLinkTxt: { fontSize: 11, color: colors.txt3, letterSpacing: 1 },
 
-    detSheet: { position: 'absolute', top: 210, bottom: 0, left: 0, right: 0 },
-    detSheetContent: { minHeight: '100%' },
+    detSheetContent: {},
     detSheetInner: { backgroundColor: isDark ? 'rgba(10,9,7,0.97)' : 'rgba(242,237,230,0.97)', minHeight: 500, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
     detPill: { width: 34, height: 3, backgroundColor: colors.border2, borderRadius: 3, alignSelf: 'center', marginTop: 14, marginBottom: 16 },
     detBody: { paddingHorizontal: 20, paddingTop: 4 },
 
-    heroImgWrap: { height: 260, width: '100%', overflow: 'hidden' },
+    heroImgWrap: { height: 270, width: '100%', overflow: 'hidden' },
     heroImg: { width: '100%', height: '100%' },
     heroImgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.18)' },
+    heroSpacer: { height: 210, backgroundColor: 'transparent' },
 
     detName: { fontFamily: fonts.display, fontSize: 26, color: colors.txt, letterSpacing: 0.5, lineHeight: 32 },
     detMeta: { flexDirection: 'row', gap: 10, marginTop: 8, alignItems: 'center' },

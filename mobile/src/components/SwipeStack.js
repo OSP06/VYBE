@@ -5,6 +5,31 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { fonts, radius } from '../constants/theme';
 import FadeImage from './FadeImage';
 
+const MOOD_DIMS = {
+  calm:         ['calm', 'work_friendly', 'aesthetic'],
+  aesthetic:    ['aesthetic', 'calm', 'date_friendly'],
+  energetic:    ['lively', 'social', 'budget'],
+  social:       ['social', 'lively', 'date_friendly'],
+  focus:        ['work_friendly', 'calm', 'budget'],
+  romantic:     ['date_friendly', 'aesthetic', 'premium'],
+  explore:      ['aesthetic', 'lively', 'social'],
+  budget_chill: ['budget', 'calm', 'social'],
+};
+
+const DIM_WORDS = {
+  calm: 'quiet', aesthetic: 'aesthetic', lively: 'lively', social: 'social',
+  premium: 'upscale', budget: 'affordable', work_friendly: 'work-friendly',
+  date_friendly: 'intimate',
+};
+
+function matchReason(moodId, vibeVector) {
+  if (!vibeVector || !moodId) return null;
+  const dims = MOOD_DIMS[moodId] || [];
+  const hits = dims.filter((d) => (vibeVector[d] || 0) > 0.5).slice(0, 2);
+  if (!hits.length) return null;
+  return `MATCHED FOR ${moodId.replace('_', ' ').toUpperCase()} · ${hits.map((d) => DIM_WORDS[d] || d).join(' · ')}`;
+}
+
 const PLACE_GRADS = [
   ['#c8ddd0', '#6b8f5e'], ['#e0d0ec', '#b09ac0'], ['#f0d8c0', '#e8c4a0'],
   ['#f0e0c0', '#e8d4a8'], ['#c8d8e8', '#7a9ab0'], ['#f0d0d8', '#c07a8a'],
@@ -24,7 +49,7 @@ function topVibes(vv, n = 3) {
     .map(([k]) => VIBE_LABELS[k] || k.toUpperCase());
 }
 
-export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave, colors }) {
+export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave, colors, mood }) {
   const [index, setIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
   const pan = useRef(new Animated.ValueXY()).current;
@@ -137,7 +162,10 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
               onError={() => setImgError(true)}
             />
           )}
-          <View style={styles.cardImgOverlay} />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            style={[StyleSheet.absoluteFill, { top: '45%' }]}
+          />
 
           {/* Swipe direction labels */}
           <Animated.View style={[styles.swipeLabelLeft, { opacity: skipOpacity }]}>
@@ -160,34 +188,44 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
 
         {/* Info — fills remaining card height */}
         <View style={styles.cardBody}>
-          <Text style={[styles.cardName, { color: colors.txt }]} numberOfLines={2}>{place.name}</Text>
-          {place.neighborhood && (
-            <Text style={[styles.cardNeighborhood, { color: colors.txt3 }]}>📍 {place.neighborhood}</Text>
-          )}
-          {place.vibe?.summary ? (
-            <Text style={[styles.cardSummary, { color: colors.txt2 }]} numberOfLines={2}>{place.vibe.summary}</Text>
-          ) : null}
-          {place.vibe?.vibe_vector && (
-            <View style={styles.cardChips}>
-              {topVibes(place.vibe.vibe_vector).map((v) => (
-                <View key={v} style={[styles.cardChip, { borderColor: colors.border, backgroundColor: colors.glass }]}>
-                  <Text style={[styles.cardChipTxt, { color: colors.txt2 }]}>{v}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {/* Top content — scrolls/clips internally, never pushes footer */}
+          <View style={styles.cardTop}>
+            <Text style={[styles.cardName, { color: colors.txt }]} numberOfLines={1}>{place.name}</Text>
+            {matchReason(mood?.id, place.vibe?.vibe_vector) ? (
+              <Text style={[styles.cardMatchReason, { color: colors.sage }]}>
+                {matchReason(mood?.id, place.vibe?.vibe_vector)}
+              </Text>
+            ) : null}
+            {place.neighborhood ? (
+              <Text style={[styles.cardNeighborhood, { color: colors.txt3 }]} numberOfLines={1}>📍 {place.neighborhood}</Text>
+            ) : null}
+            {place.vibe?.summary ? (
+              <Text style={[styles.cardSummary, { color: colors.txt2 }]} numberOfLines={2}>{place.vibe.summary}</Text>
+            ) : null}
+            {place.vibe?.vibe_vector ? (
+              <View style={styles.cardChips}>
+                {topVibes(place.vibe.vibe_vector, 2).map((v) => (
+                  <View key={v} style={[styles.cardChip, { borderColor: colors.border, backgroundColor: colors.glass }]}>
+                    <Text style={[styles.cardChipTxt, { color: colors.txt2 }]}>{v}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+
+          {/* Footer — always visible, pinned to bottom */}
           <View style={styles.cardFootRow}>
             <Pressable style={styles.seeMoreBtn} onPress={() => onPress(place)}>
               <Text style={styles.seeMoreTxt}>SEE MORE</Text>
               <View style={styles.seeMoreArrow}>
-                <Text style={{ color: colors.bg, fontSize: 13 }}>→</Text>
+                <Text style={{ color: colors.bg, fontSize: 12 }}>→</Text>
               </View>
             </Pressable>
-            <View style={{ alignItems: 'flex-end' }}>
+            <View style={{ alignItems: 'flex-end', gap: 2 }}>
               <Text style={[styles.cardPrice, { color: colors.txt2 }]}>{PRICE[place.price_range]}</Text>
-              {place.score >= 0.55 && (
+              {place.score >= 0.55 ? (
                 <Text style={[styles.cardMatch, { color: colors.sage }]}>{Math.round(place.score * 100)}% VIBE MATCH</Text>
-              )}
+              ) : null}
             </View>
           </View>
         </View>
@@ -215,54 +253,55 @@ function makeStyles(colors) {
     },
     shadowCard: { backgroundColor: colors?.border2 || '#E0D8CC' },
 
-    cardImg: { height: '60%' },
-    cardImgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.14)' },
+    cardImg: { height: '56%' },
 
     swipeLabelLeft: {
-      position: 'absolute', top: 22, left: 18,
+      position: 'absolute', top: 20, left: 16,
       borderWidth: 2.5, borderColor: '#C25B4E', borderRadius: radius.card,
       paddingHorizontal: 12, paddingVertical: 5,
     },
-    swipeLabelTxtSkip: { fontFamily: fonts.display, fontSize: 18, color: '#C25B4E', letterSpacing: 2 },
+    swipeLabelTxtSkip: { fontFamily: fonts.display, fontSize: 17, color: '#C25B4E', letterSpacing: 2 },
     swipeLabelRight: {
-      position: 'absolute', top: 22, right: 18,
+      position: 'absolute', top: 20, right: 16,
       borderWidth: 2.5, borderColor: colors?.sage || '#6B8F5E', borderRadius: radius.card,
       paddingHorizontal: 12, paddingVertical: 5,
     },
-    swipeLabelTxtSave: { fontFamily: fonts.display, fontSize: 18, color: colors?.sage || '#6B8F5E', letterSpacing: 2 },
+    swipeLabelTxtSave: { fontFamily: fonts.display, fontSize: 17, color: colors?.sage || '#6B8F5E', letterSpacing: 2 },
 
-    cardHeart: { position: 'absolute', top: 14, right: 14 },
+    cardHeart: { position: 'absolute', top: 14, right: 14, padding: 4 },
     ratingPill: {
       position: 'absolute', bottom: 12, left: 14,
-      backgroundColor: 'rgba(0,0,0,0.62)',
-      paddingHorizontal: 12, paddingVertical: 5, borderRadius: radius.card,
+      backgroundColor: 'rgba(0,0,0,0.65)',
+      paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
     },
-    ratingTxt: { fontSize: 12, fontWeight: '700' },
+    ratingTxt: { fontSize: 11, fontWeight: '700' },
 
-    cardBody: { flex: 1, padding: 18, gap: 8, justifyContent: 'space-between' },
-    cardName: { fontFamily: fonts.display, fontSize: 26, letterSpacing: 0.5, lineHeight: 26 },
-    cardNeighborhood: { fontSize: 12, marginTop: -4 },
-    cardSummary: { fontSize: 12, lineHeight: 18 },
-    cardChips: { flexDirection: 'row', gap: 6 },
-    cardChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 3, borderWidth: 1 },
+    cardBody: { flex: 1, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, justifyContent: 'space-between' },
+    cardTop: { flex: 1, gap: 5, overflow: 'hidden' },
+    cardName: { fontFamily: fonts.display, fontSize: 23, letterSpacing: 0.3, lineHeight: 25 },
+    cardMatchReason: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+    cardNeighborhood: { fontSize: 11, color: '#999' },
+    cardSummary: { fontSize: 11, lineHeight: 16 },
+    cardChips: { flexDirection: 'row', gap: 5, marginTop: 2 },
+    cardChip: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 3, borderWidth: 1 },
     cardChipTxt: { fontSize: 9, fontWeight: '600', letterSpacing: 0.5 },
 
-    cardFootRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    cardFootRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
     seeMoreBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 10,
+      flexDirection: 'row', alignItems: 'center', gap: 8,
       backgroundColor: colors?.txt || '#1A1814',
-      borderRadius: radius.card, paddingHorizontal: 20, paddingVertical: 13,
+      borderRadius: radius.card, paddingHorizontal: 18, paddingVertical: 11,
     },
-    seeMoreTxt: { fontFamily: fonts.display, fontSize: 15, color: colors?.bg || '#F2EDE6', letterSpacing: 1.5 },
+    seeMoreTxt: { fontFamily: fonts.display, fontSize: 13, color: colors?.bg || '#F2EDE6', letterSpacing: 1.5 },
     seeMoreArrow: {
-      width: 24, height: 24, borderRadius: radius.card,
+      width: 22, height: 22, borderRadius: 22,
       backgroundColor: colors?.txt2 || '#7A7060',
       alignItems: 'center', justifyContent: 'center',
     },
     cardPrice: { fontSize: 13, fontWeight: '600' },
-    cardMatch: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+    cardMatch: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
-    hint: { position: 'absolute', bottom: 4, fontSize: 10, letterSpacing: 2, opacity: 0.45 },
+    hint: { position: 'absolute', bottom: 4, fontSize: 9, letterSpacing: 2, opacity: 0.4 },
 
     emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     emptyTitle: { fontFamily: fonts.display, fontSize: 26, color: colors?.txt || '#1A1814', letterSpacing: 1 },

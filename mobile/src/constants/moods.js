@@ -2,7 +2,7 @@ export const MOODS = [
   {
     id: 'calm',
     label: 'CALM',
-    tagline: 'slow mornings',
+    tagline: 'places where time slows down',
     emoji: '😌',
     dot: '#7aab90',
     grad: ['#c8ddd0', '#6b8f5e'],
@@ -11,7 +11,7 @@ export const MOODS = [
   {
     id: 'aesthetic',
     label: 'AESTHETIC',
-    tagline: 'picture-perfect',
+    tagline: 'spaces worth standing still for',
     emoji: '✨',
     dot: '#b09ac0',
     grad: ['#e0d0ec', '#b09ac0'],
@@ -20,7 +20,7 @@ export const MOODS = [
   {
     id: 'energetic',
     label: 'ENERGETIC',
-    tagline: 'high energy',
+    tagline: 'buzzing rooms, loud tables',
     emoji: '🔥',
     dot: '#d4834a',
     grad: ['#f0d8c0', '#e8c4a0'],
@@ -29,7 +29,7 @@ export const MOODS = [
   {
     id: 'social',
     label: 'SOCIAL',
-    tagline: 'good company',
+    tagline: 'made for staying too long',
     emoji: '👥',
     dot: '#c9a66b',
     grad: ['#f0e0c0', '#e8d4a8'],
@@ -38,7 +38,7 @@ export const MOODS = [
   {
     id: 'focus',
     label: 'FOCUS',
-    tagline: 'deep work',
+    tagline: 'quiet enough to think clearly',
     emoji: '💻',
     dot: '#7a9ab0',
     grad: ['#c8d8e8', '#7a9ab0'],
@@ -47,7 +47,7 @@ export const MOODS = [
   {
     id: 'romantic',
     label: 'ROMANTIC',
-    tagline: 'date night',
+    tagline: 'dim lights & close tables',
     emoji: '❤️',
     dot: '#c07a8a',
     grad: ['#f0d0d8', '#c07a8a'],
@@ -56,7 +56,7 @@ export const MOODS = [
   {
     id: 'explore',
     label: 'EXPLORE',
-    tagline: 'discover new',
+    tagline: 'off the algorithm, on foot',
     emoji: '🌍',
     dot: '#6aaa98',
     grad: ['#c8e0d8', '#6aaa98'],
@@ -65,7 +65,7 @@ export const MOODS = [
   {
     id: 'budget_chill',
     label: 'CHILL',
-    tagline: 'easy on wallet',
+    tagline: 'good time, easy bill',
     emoji: '💸',
     dot: '#a0a868',
     grad: ['#d8dcc0', '#a0a868'],
