@@ -15,8 +15,10 @@ import sys
 import os
 import re
 import time
+import math
 
 import httpx
+from rapidfuzz import fuzz
 from sqlalchemy import select
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -28,7 +30,13 @@ from app.core.config import settings
 
 GOOGLE_API_KEY = settings.GOOGLE_PLACES_API_KEY
 PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
-FIELD_MASK = "places.id,places.displayName,places.rating,places.formattedAddress,places.location,places.priceLevel,places.photos,places.reviews,places.regularOpeningHours"
+FIELD_MASK = (
+    "places.id,places.displayName,places.rating,places.formattedAddress,"
+    "places.location,places.priceLevel,places.photos,places.reviews,"
+    "places.regularOpeningHours,places.businessStatus,"
+    "places.goodForGroups,places.liveMusic,places.quietPlace,"
+    "places.servesCoffee,places.servesBrunch,places.servesCocktails"
+)
 
 PRICE_LEVEL_MAP = {
     "PRICE_LEVEL_FREE": 1,
@@ -77,6 +85,23 @@ def clean_place_name(name: str) -> str:
                 name = name.split(sep)[0].strip()
                 break
     return name
+
+
+def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6_371_000
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _is_duplicate(name: str, lat: float, lng: float, existing: list[tuple]) -> bool:
+    """Return True if a place with a similar name exists within 50m."""
+    for ex_name, ex_lat, ex_lng in existing:
+        if _haversine_m(lat, lng, ex_lat, ex_lng) < 50:
+            if fuzz.ratio(name.lower(), ex_name.lower()) > 80:
+                return True
+    return False
 
 
 def build_photo_url(photo_name: str) -> str:
@@ -148,6 +173,10 @@ async def ingest(city_name: str, lat: float, lng: float):
         seen_ids = set(r[0] for r in existing.all())
         print(f"Existing Google places in DB: {len(seen_ids)}")
 
+        # Load existing (name, lat, lng) for geo+name duplicate detection
+        existing_coords_q = await db.execute(select(Place.name, Place.lat, Place.lng))
+        existing_coords: list[tuple] = existing_coords_q.all()
+
         inserted = 0
         skipped = 0
 
@@ -168,6 +197,13 @@ async def ingest(city_name: str, lat: float, lng: float):
                     location = p.get("location", {})
                     place_lat = location.get("latitude", lat)
                     place_lng = location.get("longitude", lng)
+
+                    if _is_duplicate(name, place_lat, place_lng, existing_coords):
+                        print(f"  ~ SKIP duplicate: {name}")
+                        skipped += 1
+                        continue
+                    existing_coords.append((name, place_lat, place_lng))
+
                     rating = float(p.get("rating", 4.0))
                     price_str = p.get("priceLevel", "PRICE_LEVEL_MODERATE")
                     price_range = PRICE_LEVEL_MAP.get(price_str, 2)
@@ -177,13 +213,28 @@ async def ingest(city_name: str, lat: float, lng: float):
                     image_url = build_photo_url(photos[0]["name"]) if photos else None
 
                     raw_reviews = p.get("reviews", [])
-                    snippets = [
-                        r["text"]["text"] for r in raw_reviews
-                        if r.get("text", {}).get("languageCode", "en") == "en" and r.get("text", {}).get("text")
-                    ][:5] or None
+                    snippets = []
+                    for r in raw_reviews:
+                        if r.get("text", {}).get("languageCode", "en") == "en" and r.get("text", {}).get("text"):
+                            snippets.append({
+                                "text": r["text"]["text"],
+                                "date": r.get("publishTime", "")[:10],
+                            })
+                    snippets = snippets[:5] or None
 
                     raw_hours = p.get("regularOpeningHours", {}).get("periods")
                     opening_hours = raw_hours if isinstance(raw_hours, list) else None
+
+                    place_attributes = {
+                        "quietPlace": p.get("quietPlace", False),
+                        "liveMusic": p.get("liveMusic", False),
+                        "goodForGroups": p.get("goodForGroups", False),
+                        "servesCoffee": p.get("servesCoffee", False),
+                        "servesBrunch": p.get("servesBrunch", False),
+                        "servesCocktails": p.get("servesCocktails", False),
+                        "priceLevel": p.get("priceLevel", "PRICE_LEVEL_MODERATE"),
+                    }
+                    business_status = p.get("businessStatus", "OPERATIONAL")
 
                     place = Place(
                         city_id=city_id,
@@ -197,6 +248,9 @@ async def ingest(city_name: str, lat: float, lng: float):
                         google_place_id=gid,
                         review_snippets=snippets,
                         opening_hours=opening_hours,
+                        place_attributes=place_attributes,
+                        business_status=business_status,
+                        is_active=True,
                     )
                     db.add(place)
                     inserted += 1

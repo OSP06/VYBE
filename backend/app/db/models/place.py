@@ -29,6 +29,9 @@ class Place(Base):
     neighborhood: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     review_snippets: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     opening_hours: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    place_attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    business_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     city: Mapped["City"] = relationship(back_populates="places")
     vibe: Mapped[Optional["PlaceVibe"]] = relationship(back_populates="place", uselist=False)

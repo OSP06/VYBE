@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -18,5 +18,6 @@ class PlaceVibe(Base):
     hype_score: Mapped[float]
     summary: Mapped[str] = mapped_column(String(500))
     crowd: Mapped[str] = mapped_column(String(100))
+    vision_vibe_vector: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     place: Mapped["Place"] = relationship(back_populates="vibe")

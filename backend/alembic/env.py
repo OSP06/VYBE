@@ -17,10 +17,11 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+asyncpg://vybe:vybe@localhost:5432/vybe",
-).replace("postgresql+asyncpg://", "postgresql://")
+DATABASE_URL = (
+    os.environ.get("DATABASE_URL", "postgresql+asyncpg://vybe:vybe@localhost:5432/vybe")
+    .replace("postgresql+asyncpg://", "postgresql://")
+    .replace("ssl=require", "sslmode=require")
+)
 
 
 def run_migrations_offline() -> None:

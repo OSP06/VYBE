@@ -141,6 +141,20 @@ def rank_places(
                 score += 0.10 * (1.0 / (1.0 + dist))
             if place.id in fb:
                 score += 0.08 if fb[place.id] else -0.08
+
+            # Overhype penalty — tourist-trap places with high review volume
+            # hurt quiet-mood users most; dampen them for calm/focus/romantic
+            if mood_key in ('calm', 'focus', 'romantic') and vibe.hype_score > 0.8:
+                score *= 0.88
+
+            # Day-of-week context — same place feels different on a Tuesday vs Saturday
+            dow = datetime.now().weekday()  # 0=Mon … 6=Sun
+            is_weekend = dow >= 5
+            if mood_key == 'social' and is_weekend:
+                score *= 1.12
+            elif mood_key == 'focus' and not is_weekend:
+                score *= 1.08
+
         results.append((place, vibe, round(score, 4)))
     results.sort(key=lambda x: x[2], reverse=True)
     return results

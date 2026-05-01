@@ -6,14 +6,14 @@ Usage:
   python ai-worker/generate_vibes.py --regenerate   # re-score even existing vibes
 
 Idempotent by default: skips places that already have a vibe entry.
---regenerate deletes existing vibes and re-scores from scratch (useful after
-running enrich_reviews.py to get review-calibrated scores).
+--regenerate deletes existing vibes and re-scores from scratch.
 """
 import argparse
 import asyncio
 import json
 import os
 import sys
+from datetime import date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
@@ -25,23 +25,96 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
 
-from app.db.models import Place, PlaceVibe  # noqa: E402 — needs sys.path set first
+from app.db.models import Place, PlaceVibe  # noqa: E402
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://vybe:vybe@localhost:5432/vybe")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+ATMOSPHERE_KEYWORDS = [
+    'quiet', 'noisy', 'loud', 'lighting', 'lit', 'dim', 'bright',
+    'vibe', 'atmosphere', 'crowd', 'crowded', 'busy', 'packed', 'empty',
+    'music', 'cozy', 'cosy', 'ambiance', 'ambience', 'decor', 'seating',
+    'intimate', 'spacious', 'airy', 'warm', 'cool', 'aesthetic',
+]
+
+ATTRIBUTE_BOOSTS = {
+    "quietPlace":      {"calm": 0.2,  "work_friendly": 0.15},
+    "liveMusic":       {"lively": 0.25, "social": 0.15},
+    "goodForGroups":   {"social": 0.2},
+    "servesCocktails": {"social": 0.1, "date_friendly": 0.1},
+}
+
+PRICE_BOOSTS = {
+    "PRICE_LEVEL_FREE":          {"budget": 0.25},
+    "PRICE_LEVEL_INEXPENSIVE":   {"budget": 0.25},
+    "PRICE_LEVEL_EXPENSIVE":     {"premium": 0.2},
+    "PRICE_LEVEL_VERY_EXPENSIVE": {"premium": 0.2},
+}
+
+
+def recency_weight(date_str: str) -> float:
+    if not date_str:
+        return 0.5
+    try:
+        review_date = date.fromisoformat(date_str)
+        months_ago = (date.today() - review_date).days / 30
+        if months_ago <= 6:
+            return 1.0
+        if months_ago <= 18:
+            return 0.7
+        return 0.4
+    except Exception:
+        return 0.5
+
+
+def quality_score(review: dict) -> float:
+    text = review.get("text", "") if isinstance(review, dict) else str(review)
+    words = text.split()
+    if len(words) < 20:
+        return 0.0
+    mentions = any(w in text.lower() for w in ATMOSPHERE_KEYWORDS)
+    return len(words) * (1.5 if mentions else 1.0)
+
+
+def apply_attribute_boosts(vibe_vector: dict, place_attributes: dict | None) -> dict:
+    if not place_attributes:
+        return vibe_vector
+    v = dict(vibe_vector)
+    for attr, boosts in ATTRIBUTE_BOOSTS.items():
+        if place_attributes.get(attr):
+            for dim, boost in boosts.items():
+                v[dim] = min(1.0, v.get(dim, 0.0) + boost)
+    price = place_attributes.get("priceLevel", "")
+    for dim, boost in PRICE_BOOSTS.get(price, {}).items():
+        v[dim] = min(1.0, v.get(dim, 0.0) + boost)
+    return v
 
 
 def build_prompt(name: str, address: str, reviews: list | None = None) -> str:
     review_block = ""
     if reviews:
-        joined = "\n".join(f'- "{r[:300]}"' for r in reviews[:8])
-        review_block = (
-            f"\n\nReal user reviews (use these to calibrate your scores — "
-            f"they reflect what people actually experience):\n{joined}"
-        )
+        # Normalise: handle both old format (list of str) and new (list of dict)
+        normalized = []
+        for r in reviews:
+            if isinstance(r, dict):
+                normalized.append(r)
+            else:
+                normalized.append({"text": str(r), "date": ""})
+
+        # Filter by quality, sort by recency (most recent first)
+        filtered = [r for r in normalized if quality_score(r) > 0]
+        filtered.sort(key=lambda r: recency_weight(r.get("date", "")), reverse=True)
+        top = filtered[:10]
+
+        if top:
+            joined = "\n".join(f'- "{r["text"][:300]}"' for r in top)
+            review_block = f"\n\nAtmosphere-relevant user reviews (recent weighted higher):\n{joined}"
 
     return f"""You are a place vibe analyst for a mood-based discovery app.
-Analyze "{name}" located at "{address}".{review_block}
+Analyze the ATMOSPHERE ONLY of "{name}" located at "{address}".{review_block}
+
+IGNORE completely: food quality, menu items, drinks, service speed, staff friendliness, prices, wait times, value for money.
+FOCUS ONLY ON: lighting quality, noise level, crowd density, music type and volume, seating comfort and layout, interior decor, time-of-day feel, overall ambiance and energy.
 
 Return ONLY valid JSON — no markdown, no explanation:
 {{
@@ -56,19 +129,19 @@ Return ONLY valid JSON — no markdown, no explanation:
     "date_friendly": <0.0-1.0>
   }},
   "hype_score": <0.0-1.0>,
-  "summary": "<2-sentence evocative description>",
+  "summary": "<2-sentence evocative description of the physical space and atmosphere>",
   "crowd": "<one of: students/couples/families/professionals/locals/tourists/mixed>"
 }}
 
-Dimension definitions:
-- calm: ambient quietness and relaxed pace
+Dimension definitions (atmosphere only):
+- calm: ambient quietness and relaxed pace of the space
 - aesthetic: visual appeal, decor quality, instagrammability
-- lively: energy, music, buzz, activity level
-- social: group-friendliness, open layout encouraging conversation
-- premium: price point and luxury feel (high = expensive)
-- budget: affordability and value (high = cheap and cheerful)
-- work_friendly: wifi quality, good seating, noise level for laptops
-- date_friendly: intimacy, lighting, romantic ambiance"""
+- lively: energy, music volume, activity level, buzz
+- social: open layout and group-friendliness of the space
+- premium: luxury feel of the interior (not price)
+- budget: casual, unpretentious, neighbourhood-feel
+- work_friendly: seating for laptops, noise level suitable for focus
+- date_friendly: intimacy, lighting quality, romantic ambiance"""
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=10))
@@ -110,9 +183,13 @@ async def main(regenerate: bool):
             print(f"  PROC  {place.name}{'  [+reviews]' if has_reviews else ''}...")
             try:
                 data = await get_vibe(client, place)
+
+                # Apply structured attribute boosts on top of GPT scores
+                boosted_vector = apply_attribute_boosts(data["vibe_vector"], place.place_attributes)
+
                 vibe = PlaceVibe(
                     place_id=place.id,
-                    vibe_vector=data["vibe_vector"],
+                    vibe_vector=boosted_vector,
                     hype_score=float(data["hype_score"]),
                     summary=data["summary"],
                     crowd=data["crowd"],

@@ -51,6 +51,7 @@ async def get_places(
         select(Place, PlaceVibe)
         .outerjoin(PlaceVibe, Place.id == PlaceVibe.place_id)
         .where(Place.city_id == city_id)
+        .where(Place.is_active == True)
     )
     if neighborhood:
         stmt = stmt.where(Place.neighborhood == neighborhood)
