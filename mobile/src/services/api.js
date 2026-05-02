@@ -30,13 +30,14 @@ const authHeader = (token) => ({ headers: { Authorization: `Bearer ${token}` } }
 const SF_LAT = 37.7749;
 const SF_LNG = -122.4194;
 
-export const fetchPlaces = async (mood, cityId = 1, limit = 30, neighborhood = null, userLat = null, userLng = null, openNow = false) => {
+export const fetchPlaces = async (mood, cityId = 1, limit = 30, neighborhood = null, userLat = null, userLng = null, openNow = false, maxDistanceKm = null) => {
   let url = `/api/v1/places?city_id=${cityId}&mood=${mood}&limit=${limit}&min_score=0.25`;
   if (neighborhood) url += `&neighborhood=${encodeURIComponent(neighborhood)}`;
   if (openNow) url += `&open_now=true`;
   const lat = userLat ?? SF_LAT;
   const lng = userLng ?? SF_LNG;
   url += `&lat=${lat}&lng=${lng}`;
+  if (maxDistanceKm !== null) url += `&max_distance_km=${maxDistanceKm}`;
   const res = await api.get(url);
   return res.data;
 };

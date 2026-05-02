@@ -115,6 +115,7 @@ def rank_places(
     user_lng: Optional[float] = None,
     hour: Optional[int] = None,
     feedback: Optional[dict] = None,
+    max_distance_km: Optional[float] = None,
 ) -> list:
     """
     feedback: {place_id: felt_right (bool)} — personalises scores based on
@@ -128,6 +129,9 @@ def rank_places(
     fb = feedback or {}
     results = []
     for place, vibe in rows:
+        if max_distance_km is not None and user_lat is not None and user_lng is not None:
+            if _distance_km(user_lat, user_lng, place.lat, place.lng) > max_distance_km:
+                continue
         if vibe is None:
             score = 0.0
         else:

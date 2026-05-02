@@ -44,6 +44,7 @@ async def get_places(
     neighborhood: Optional[str] = None,
     min_score: float = 0.25,
     open_now: bool = False,
+    max_distance_km: Optional[float] = None,
     db: AsyncSession = Depends(get_db),
     user_id: Optional[int] = Depends(_optional_user_id),
 ):
@@ -68,7 +69,7 @@ async def get_places(
         # Most recent vote wins if there are duplicates; last row in list used
         feedback = {r.place_id: r.felt_right for r in fb_rows}
 
-    all_ranked = [r for r in rank_places(rows, mood, user_lat=lat, user_lng=lng, feedback=feedback) if r[2] >= min_score]
+    all_ranked = [r for r in rank_places(rows, mood, user_lat=lat, user_lng=lng, feedback=feedback, max_distance_km=max_distance_km) if r[2] >= min_score]
     if open_now:
         all_ranked = [r for r in all_ranked if is_open_now(r[0].opening_hours)]
     ranked = all_ranked[:limit]

@@ -23,6 +23,7 @@ export default function Home({ navigation, route }) {
   const [showAreaPicker, setShowAreaPicker] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(false);
+  const [nearMeOnly, setNearMeOnly] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -50,8 +51,8 @@ export default function Home({ navigation, route }) {
   });
 
   const { data: places = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['places', activeMood.id, neighborhood, userLocation?.lat],
-    queryFn: () => fetchPlaces(activeMood.id, city?.id ?? 1, 20, neighborhood, userLocation?.lat, userLocation?.lng, false),
+    queryKey: ['places', activeMood.id, neighborhood, userLocation?.lat, nearMeOnly],
+    queryFn: () => fetchPlaces(activeMood.id, city?.id ?? 1, 20, neighborhood, userLocation?.lat, userLocation?.lng, false, nearMeOnly && userLocation ? 5 : null),
   });
 
   const { data: savedPlaces = [] } = useQuery({
@@ -92,7 +93,16 @@ export default function Home({ navigation, route }) {
           )}
         </Pressable>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {userLocation && <Text style={styles.locDot}>● LIVE</Text>}
+          {userLocation && (
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setNearMeOnly(v => !v); }}
+              style={[styles.nearMeBtn, nearMeOnly && styles.nearMeBtnOn]}
+            >
+              <Text style={[styles.nearMeTxt, nearMeOnly && styles.nearMeTxtOn]}>
+                {nearMeOnly ? '◎ NEAR ME' : '◎ NEAR ME'}
+              </Text>
+            </Pressable>
+          )}
           <Pressable onPress={refetch} hitSlop={10} style={styles.refreshBtn}>
             <Text style={styles.refreshIco}>↻</Text>
           </Pressable>
@@ -161,7 +171,7 @@ export default function Home({ navigation, route }) {
         ) : places.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>No places for this vibe</Text>
-            <Text style={styles.emptyTxt}>{neighborhood ? 'Try a different area' : 'Try another mood'}</Text>
+            <Text style={styles.emptyTxt}>{nearMeOnly ? 'Nothing within 5km — try turning off Near Me' : neighborhood ? 'Try a different area' : 'Try another mood'}</Text>
           </View>
         ) : (
           <SwipeStack
@@ -199,7 +209,10 @@ function makeStyles(colors) {
     feedArrow: { fontSize: 28, color: colors.txt, marginTop: -7 },
     neighborhoodBadge: { backgroundColor: colors.gold, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 2 },
     neighborhoodBadgeTxt: { fontFamily: fonts.display, fontSize: 9, color: '#fff', letterSpacing: 1 },
-    locDot: { fontSize: 8, color: colors.sage, fontWeight: '700', letterSpacing: 1 },
+    nearMeBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 3, borderWidth: 1, borderColor: colors.border2 },
+    nearMeBtnOn: { backgroundColor: colors.sage, borderColor: colors.sage },
+    nearMeTxt: { fontFamily: fonts.display, fontSize: 8, color: colors.txt3, letterSpacing: 1 },
+    nearMeTxtOn: { color: '#fff' },
     refreshBtn: { padding: 2 },
     refreshIco: { fontSize: 14, color: colors.txt3 },
 
