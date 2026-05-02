@@ -38,6 +38,7 @@ class PlaceSchema(BaseModel):
     opening_hours: Optional[list] = None
     vibe: Optional[PlaceVibeSchema] = None
     score: Optional[float] = None
+    food_tags: Optional[list] = None
 
 
 class CitySchema(BaseModel):

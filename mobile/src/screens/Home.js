@@ -6,9 +6,12 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchPlaces, fetchCities, fetchNeighborhoods, savePlace, unsavePlace, fetchSaved } from '../services/api';
 import { fonts, radius } from '../constants/theme';
 import { MOODS } from '../constants/moods';
+import { ALL_FOODS } from '../constants/foods';
+import FoodChipRow from '../components/FoodChipRow';
 import StatusRow from '../components/StatusRow';
 import SwipeStack from '../components/SwipeStack';
 import { useTheme } from '../contexts/ThemeContext';
@@ -18,12 +21,19 @@ export default function Home({ navigation, route }) {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, token } = useAuth();
-  const [activeMood, setActiveMood] = useState(route.params.mood);
+  const [activeMood, setActiveMood] = useState(route.params.mood || null);
+  const [activeFood, setActiveFood] = useState(route.params.food || null);
   const [neighborhood, setNeighborhood] = useState(null);
   const [showAreaPicker, setShowAreaPicker] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(false);
   const [nearMeOnly, setNearMeOnly] = useState(false);
+
+  const handleFoodSelect = (food) => {
+    setActiveFood(food);
+    if (food) AsyncStorage.setItem('lastFood', JSON.stringify(food));
+    else AsyncStorage.removeItem('lastFood');
+  };
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -51,8 +61,13 @@ export default function Home({ navigation, route }) {
   });
 
   const { data: places = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['places', activeMood.id, neighborhood, userLocation?.lat, nearMeOnly],
-    queryFn: () => fetchPlaces(activeMood.id, city?.id ?? 1, 20, neighborhood, userLocation?.lat, userLocation?.lng, false, nearMeOnly && userLocation ? 5 : null),
+    queryKey: ['places', activeMood?.id, activeFood?.id, neighborhood, userLocation?.lat, nearMeOnly],
+    queryFn: () => fetchPlaces(
+      activeMood?.id ?? null, city?.id ?? 1, 20, neighborhood,
+      userLocation?.lat, userLocation?.lng, false,
+      nearMeOnly && userLocation ? 5 : null,
+      activeFood?.id ?? null,
+    ),
   });
 
   const { data: savedPlaces = [] } = useQuery({
@@ -150,8 +165,19 @@ export default function Home({ navigation, route }) {
         </ScrollView>
       </View>
 
+      {/* Food chip row */}
+      <View style={styles.chipRowWrap}>
+        <FoodChipRow categories={ALL_FOODS} selected={activeFood} onSelect={handleFoodSelect} colors={colors} />
+      </View>
+
       <View style={styles.rankBadgeRow}>
-        <Text style={styles.rankBadgeTxt}>RANKED BY VIBE FIT · NOT STARS</Text>
+        <Text style={styles.rankBadgeTxt}>
+          {activeMood && activeFood
+            ? `${activeMood.label.toUpperCase()} + ${activeFood.label.toUpperCase()} · VIBE FIT`
+            : activeMood ? 'RANKED BY VIBE FIT · NOT STARS'
+            : activeFood ? `${activeFood.label.toUpperCase()} SPOTS · VIBE RANKED`
+            : 'RANKED BY VIBE FIT · NOT STARS'}
+        </Text>
       </View>
 
       {/* Swipe stack */}
@@ -171,7 +197,11 @@ export default function Home({ navigation, route }) {
         ) : places.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>No places for this vibe</Text>
-            <Text style={styles.emptyTxt}>{nearMeOnly ? 'Nothing within 5km — try turning off Near Me' : neighborhood ? 'Try a different area' : 'Try another mood'}</Text>
+            <Text style={styles.emptyTxt}>
+            {nearMeOnly ? 'Nothing within 5km — try turning off Near Me'
+              : activeFood ? `No ${activeFood.label} spots matched — try a different food`
+              : neighborhood ? 'Try a different area' : 'Try another mood'}
+          </Text>
           </View>
         ) : (
           <SwipeStack
@@ -181,7 +211,7 @@ export default function Home({ navigation, route }) {
             mood={activeMood}
             onPress={(place) => navigation.navigate('Detail', { placeId: place.id, mood: activeMood })}
             onSave={handleSave}
-            onSeeAll={() => navigation.navigate('SeeAll', { mood: activeMood, neighborhood, cityId: city?.id ?? 1, userLat: userLocation?.lat, userLng: userLocation?.lng })}
+            onSeeAll={() => navigation.navigate('SeeAll', { mood: activeMood, food: activeFood, neighborhood, cityId: city?.id ?? 1, userLat: userLocation?.lat, userLng: userLocation?.lng })}
           />
         )}
       </View>
@@ -189,9 +219,11 @@ export default function Home({ navigation, route }) {
       {!isLoading && places.length > 0 && (
         <Pressable
           style={styles.seeAllBar}
-          onPress={() => navigation.navigate('SeeAll', { mood: activeMood, neighborhood, cityId: city?.id ?? 1, userLat: userLocation?.lat, userLng: userLocation?.lng })}
+          onPress={() => navigation.navigate('SeeAll', { mood: activeMood, food: activeFood, neighborhood, cityId: city?.id ?? 1, userLat: userLocation?.lat, userLng: userLocation?.lng })}
         >
-          <Text style={styles.seeAllTxt}>SEE ALL {activeMood.label.toUpperCase()} PLACES{neighborhood ? ` IN ${neighborhood.toUpperCase()}` : ''} →</Text>
+          <Text style={styles.seeAllTxt}>
+            SEE ALL {activeMood ? activeMood.label.toUpperCase() : activeFood?.label?.toUpperCase() || ''}{activeFood && activeMood ? ` + ${activeFood.label.toUpperCase()}` : ''} PLACES{neighborhood ? ` IN ${neighborhood.toUpperCase()}` : ''} →
+          </Text>
         </Pressable>
       )}
 

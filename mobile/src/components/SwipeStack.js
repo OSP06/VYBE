@@ -52,6 +52,9 @@ function topVibes(vv, n = 3) {
 export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave, colors, mood }) {
   const [index, setIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const [lastDismissed, setLastDismissed] = useState(null);
+  const [undoVisible, setUndoVisible] = useState(false);
+  const undoTimer = useRef(null);
   const pan = useRef(new Animated.ValueXY()).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -73,7 +76,13 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
 
   useEffect(() => { setImgError(false); }, [index]);
 
-  const dismiss = (toX, toY) => {
+  const dismiss = (toX, toY, isSkip = false) => {
+    if (isSkip && topPlaceRef.current) {
+      setLastDismissed(topPlaceRef.current);
+      setUndoVisible(true);
+      clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndoVisible(false), 3000);
+    }
     Animated.parallel([
       Animated.timing(pan, { toValue: { x: toX, y: toY }, duration: 250, useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
@@ -82,6 +91,15 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
       opacity.setValue(1);
       setIndex(i => i + 1);
     });
+  };
+
+  const handleUndo = () => {
+    if (!lastDismissed) return;
+    clearTimeout(undoTimer.current);
+    setUndoVisible(false);
+    setIndex(i => Math.max(0, i - 1));
+    setLastDismissed(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
   dismissRef.current = dismiss;
 
@@ -98,7 +116,7 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
         }
         dismissRef.current(600, g.dy * 0.3);
       } else if (g.dx < -80) {
-        dismissRef.current(-600, g.dy * 0.3);
+        dismissRef.current(-600, g.dy * 0.3, true);
       } else if (g.dy > 100) {
         dismissRef.current(g.dx * 0.3, 600);
       } else {
@@ -233,6 +251,13 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
 
       {/* Swipe hint */}
       <Text style={[styles.hint, { color: colors.txt3 }]}>← SKIP · SWIPE RIGHT TO SAVE →</Text>
+
+      {/* Undo button — appears for 3s after left swipe */}
+      {undoVisible && (
+        <Pressable style={[styles.undoBtn, { backgroundColor: colors.bg, borderColor: colors.border2 }]} onPress={handleUndo}>
+          <Text style={[styles.undoTxt, { color: colors.txt2 }]}>↩ UNDO</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -302,6 +327,13 @@ function makeStyles(colors) {
     cardMatch: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
     hint: { position: 'absolute', bottom: 4, fontSize: 9, letterSpacing: 2, opacity: 0.4 },
+    undoBtn: {
+      position: 'absolute', bottom: 20, right: 14,
+      paddingHorizontal: 14, paddingVertical: 8,
+      borderRadius: 4, borderWidth: 1,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 4,
+    },
+    undoTxt: { fontFamily: fonts.display, fontSize: 11, letterSpacing: 1 },
 
     emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     emptyTitle: { fontFamily: fonts.display, fontSize: 26, color: colors?.txt || '#1A1814', letterSpacing: 1 },

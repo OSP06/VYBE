@@ -39,6 +39,40 @@ MOOD_VECTORS: dict[str, dict[str, float]] = {
 
 DIMS = ["calm", "aesthetic", "lively", "social", "premium", "budget", "work_friendly", "date_friendly"]
 
+NEUTRAL_MOOD_VECTOR = {
+    "calm": 0.55, "aesthetic": 0.62, "lively": 0.42, "social": 0.50,
+    "premium": 0.38, "budget": 0.42, "work_friendly": 0.38, "date_friendly": 0.46,
+}
+
+FOOD_RELATIVES: dict[str, list[str]] = {
+    "ramen":        ["japanese", "noodles"],
+    "sushi":        ["japanese", "seafood"],
+    "korean":       ["asian", "bbq"],
+    "italian":      ["pizza", "pasta"],
+    "cocktails":    ["wine", "craft_beer"],
+    "wine":         ["cocktails", "natural_wine"],
+    "craft_beer":   ["cocktails"],
+    "coffee":       ["brunch", "breakfast"],
+    "brunch":       ["coffee", "breakfast"],
+    "american":     ["sandwiches", "burgers"],
+    "sandwiches":   ["american"],
+    "dessert":      ["coffee", "brunch"],
+    "mediterranean":["italian"],
+    "thai":         ["asian"],
+    "indian":       ["asian"],
+}
+
+
+def compute_food_match(food_tags: list | None, food_id: str | None) -> float:
+    if not food_tags or not food_id:
+        return 0.0
+    if food_id in food_tags:
+        return 1.0
+    relatives = FOOD_RELATIVES.get(food_id, [])
+    if any(r in food_tags for r in relatives):
+        return 0.5
+    return 0.0
+
 
 def _magnitude(v: dict) -> float:
     return math.sqrt(sum(v.get(k, 0.0) ** 2 for k in DIMS))
@@ -116,6 +150,7 @@ def rank_places(
     hour: Optional[int] = None,
     feedback: Optional[dict] = None,
     max_distance_km: Optional[float] = None,
+    food: Optional[str] = None,
 ) -> list:
     """
     feedback: {place_id: felt_right (bool)} — personalises scores based on
@@ -123,12 +158,12 @@ def rank_places(
     felt_right=True  → +0.08 (they loved the vibe match)
     felt_right=False → -0.08 (the vibe didn't feel right)
     """
-    mood_key = mood.lower().replace(" ", "_")
-    mood_vec = MOOD_VECTORS.get(mood_key, MOOD_VECTORS["calm"])
+    mood_key = mood.lower().replace(" ", "_") if mood else None
+    mood_vec = MOOD_VECTORS.get(mood_key, NEUTRAL_MOOD_VECTOR) if mood_key else NEUTRAL_MOOD_VECTOR
     current_hour = hour if hour is not None else datetime.now().hour
     fb = feedback or {}
     results = []
-    for place, vibe in rows:
+    for place, vibe, food_row in rows:
         if max_distance_km is not None and user_lat is not None and user_lng is not None:
             if _distance_km(user_lat, user_lng, place.lat, place.lng) > max_distance_km:
                 continue
@@ -146,17 +181,27 @@ def rank_places(
             if place.id in fb:
                 score += 0.08 if fb[place.id] else -0.08
 
+            # Food match boost — multiplicative so vibe quality still matters
+            if food:
+                food_tags = []
+                if food_row:
+                    food_tags = (food_row.cuisine_tags or []) + (food_row.drink_tags or []) + (food_row.meal_types or [])
+                    if food_row.serves_coffee: food_tags.append("coffee")
+                    if food_row.serves_brunch: food_tags.append("brunch")
+                    if food_row.serves_alcohol: food_tags.extend(["cocktails", "wine", "craft_beer"])
+                score *= 1.0 + 0.4 * compute_food_match(food_tags, food)
+
             # Overhype penalty — tourist-trap places with high review volume
             # hurt quiet-mood users most; dampen them for calm/focus/romantic
-            if mood_key in ('calm', 'focus', 'romantic') and vibe.hype_score > 0.8:
+            if mood_key and mood_key in ('calm', 'focus', 'romantic') and vibe.hype_score > 0.8:
                 score *= 0.88
 
             # Day-of-week context — same place feels different on a Tuesday vs Saturday
             dow = datetime.now().weekday()  # 0=Mon … 6=Sun
             is_weekend = dow >= 5
-            if mood_key == 'social' and is_weekend:
+            if mood_key and mood_key == 'social' and is_weekend:
                 score *= 1.12
-            elif mood_key == 'focus' and not is_weekend:
+            elif mood_key and mood_key == 'focus' and not is_weekend:
                 score *= 1.08
 
         results.append((place, vibe, round(score, 4)))

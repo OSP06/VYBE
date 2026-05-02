@@ -24,7 +24,7 @@ from sqlalchemy import select
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app.db.base import AsyncSessionLocal as async_session
-from app.db.models import Place
+from app.db.models import Place, PlaceFood
 from app.db.models.city import City
 from app.core.config import settings
 
@@ -33,10 +33,40 @@ PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 FIELD_MASK = (
     "places.id,places.displayName,places.rating,places.formattedAddress,"
     "places.location,places.priceLevel,places.photos,places.reviews,"
-    "places.regularOpeningHours,places.businessStatus,"
+    "places.regularOpeningHours,places.businessStatus,places.primaryType,"
     "places.goodForGroups,places.liveMusic,places.quietPlace,"
-    "places.servesCoffee,places.servesBrunch,places.servesCocktails"
+    "places.servesCoffee,places.servesBrunch,places.servesCocktails,"
+    "places.servesBeer,places.servesWine,places.servesLunch,places.servesDinner,"
+    "places.servesVegetarianFood"
 )
+
+PRIMARY_TYPE_TO_CUISINE: dict[str, list[str]] = {
+    "coffee_shop": ["coffee"],
+    "cafe": ["coffee"],
+    "japanese_restaurant": ["japanese", "sushi"],
+    "ramen_restaurant": ["ramen", "japanese"],
+    "sushi_restaurant": ["sushi", "japanese"],
+    "korean_restaurant": ["korean"],
+    "italian_restaurant": ["italian", "pizza"],
+    "pizza_restaurant": ["pizza", "italian"],
+    "mexican_restaurant": ["mexican"],
+    "thai_restaurant": ["thai"],
+    "indian_restaurant": ["indian"],
+    "american_restaurant": ["american"],
+    "seafood_restaurant": ["seafood"],
+    "sandwich_shop": ["sandwiches"],
+    "bar": ["cocktails"],
+    "wine_bar": ["wine"],
+    "cocktail_bar": ["cocktails"],
+    "brunch_restaurant": ["brunch"],
+    "bakery": ["dessert", "coffee"],
+    "dessert_shop": ["dessert"],
+    "mediterranean_restaurant": ["mediterranean"],
+    "chinese_restaurant": ["chinese"],
+    "vietnamese_restaurant": ["vietnamese"],
+    "burger_restaurant": ["american"],
+    "steak_house": ["american"],
+}
 
 PRICE_LEVEL_MAP = {
     "PRICE_LEVEL_FREE": 1,
@@ -253,6 +283,32 @@ async def ingest(city_name: str, lat: float, lng: float):
                         is_active=True,
                     )
                     db.add(place)
+
+                    # Food data
+                    primary_type = p.get("primaryType", "")
+                    cuisine_tags = PRIMARY_TYPE_TO_CUISINE.get(primary_type, []) or None
+                    drink_tags = []
+                    if p.get("servesCocktails"): drink_tags.append("cocktails")
+                    if p.get("servesWine"): drink_tags.append("wine")
+                    if p.get("servesBeer"): drink_tags.append("craft_beer")
+                    meal_types = []
+                    if p.get("servesBrunch"): meal_types.append("brunch")
+                    if p.get("servesLunch"): meal_types.append("lunch")
+                    if p.get("servesDinner"): meal_types.append("dinner")
+                    if p.get("servesCoffee"): meal_types.append("coffee")
+                    await db.flush()  # get place.id before creating food row
+                    food = PlaceFood(
+                        place_id=place.id,
+                        cuisine_tags=cuisine_tags,
+                        drink_tags=drink_tags or None,
+                        meal_types=meal_types or None,
+                        serves_coffee=bool(p.get("servesCoffee")),
+                        serves_brunch=bool(p.get("servesBrunch")),
+                        serves_alcohol=bool(p.get("servesCocktails") or p.get("servesWine") or p.get("servesBeer")),
+                        serves_vegetarian=bool(p.get("servesVegetarianFood")),
+                    )
+                    db.add(food)
+
                     inserted += 1
                     print(f"  + {name} (₹{'₹' * (price_range - 1)}, ★{rating})")
 

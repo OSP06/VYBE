@@ -9,6 +9,7 @@ import FadeImage from '../components/FadeImage';
 import { BlurView } from 'expo-blur';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchPlace, savePlace, unsavePlace, fetchSaved, submitVibeFeedback } from '../services/api';
+import { FOOD_EMOJI } from '../constants/foods';
 import { fonts, radius } from '../constants/theme';
 import MoodHero from '../components/MoodHero';
 import { useTheme } from '../contexts/ThemeContext';
@@ -248,6 +249,18 @@ export default function Detail({ navigation, route }) {
               </View>
             )}
 
+            {place.food_tags?.length > 0 && (
+              <View style={styles.detChips}>
+                {place.food_tags.slice(0, 5).map((tag) => (
+                  <View key={tag} style={[styles.dChip, styles.dFoodChip]}>
+                    <Text style={styles.dChipTxt}>
+                      {FOOD_EMOJI[tag] ? `${FOOD_EMOJI[tag]} ` : ''}{tag.replace('_', ' ').toUpperCase()}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {place.vibe?.summary && (
               <View style={styles.aiBox}>
                 <Text style={styles.aiLbl}>AI VIBE READ</Text>
@@ -377,6 +390,7 @@ function makeStyles(colors, isDark) {
 
     detChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 9 },
     dChip: { backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 3 },
+    dFoodChip: { borderColor: colors.gold + '60', backgroundColor: colors.gold + '12' },
     dChipTxt: { fontSize: 9, color: colors.txt2, fontWeight: '600', letterSpacing: 0.5 },
 
     aiBox: { backgroundColor: 'rgba(107,143,94,0.10)', borderWidth: 1, borderColor: 'rgba(107,143,94,0.25)', borderRadius: radius.card, padding: 12, marginTop: 11 },

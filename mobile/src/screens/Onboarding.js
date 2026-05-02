@@ -2,11 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, SafeAreaView, StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import MoodChip from '../components/MoodChip';
+import FoodChipRow from '../components/FoodChipRow';
 import StatusRow from '../components/StatusRow';
 import { MOODS } from '../constants/moods';
+import { ALL_FOODS } from '../constants/foods';
 import { fonts, radius } from '../constants/theme';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -14,61 +17,46 @@ const OPENWEATHER_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_KEY || '';
 const FALLBACK_LAT = 37.7749;
 const FALLBACK_LNG = -122.4194;
 
-function getMoodFromWeather(weatherMain, hour) {
-  const isEvening = hour >= 18 || hour < 5;
-  const isMorning = hour >= 5 && hour < 10;
-  const isMidDay = hour >= 10 && hour < 16;
+// Weather → mood + food suggestion table
+const WEATHER_SUGGESTIONS = {
+  Rain:        { evening: { moodId: 'romantic', foodId: 'ramen' },   day: { moodId: 'focus', foodId: 'coffee' } },
+  Drizzle:     { evening: { moodId: 'romantic', foodId: 'ramen' },   day: { moodId: 'focus', foodId: 'coffee' } },
+  Thunderstorm:{ any:     { moodId: 'focus',    foodId: 'coffee' } },
+  Snow:        { any:     { moodId: 'calm',     foodId: 'ramen'  } },
+  Clouds:      { any:     { moodId: 'aesthetic',foodId: 'coffee' } },
+  Mist:        { any:     { moodId: 'aesthetic',foodId: 'coffee' } },
+  Fog:         { any:     { moodId: 'aesthetic',foodId: 'coffee' } },
+  Haze:        { any:     { moodId: 'aesthetic',foodId: 'coffee' } },
+};
 
-  switch (weatherMain) {
-    case 'Rain':
-    case 'Drizzle':
-      return isEvening
-        ? { moodId: 'romantic', emoji: '🌧', label: 'Rainy evening' }
-        : { moodId: 'focus',    emoji: '🌧', label: 'Rainy day' };
-    case 'Thunderstorm':
-      return { moodId: 'focus', emoji: '⛈', label: 'Stormy outside' };
-    case 'Snow':
-      return { moodId: 'calm', emoji: '❄️', label: 'Snowy day' };
-    case 'Mist':
-    case 'Fog':
-    case 'Haze':
-    case 'Clouds':
-      return { moodId: 'aesthetic', emoji: '☁️', label: 'Cloudy vibes' };
-    case 'Clear':
-    default:
-      if (isMorning)  return { moodId: 'calm',     emoji: '☀️', label: 'Sunny morning' };
-      if (isMidDay)   return { moodId: 'explore',  emoji: '☀️', label: 'Bright midday' };
-      if (isEvening && hour < 22) return { moodId: 'social', emoji: '🌇', label: 'Golden hour' };
-      return { moodId: 'romantic', emoji: '🌙', label: 'Late night' };
-  }
-}
+const TIME_SUGGESTIONS = [
+  { from: 5,  to: 10, moodId: 'calm',     foodId: 'brunch',   emoji: '🌅', label: 'Morning energy' },
+  { from: 10, to: 14, moodId: 'explore',  foodId: 'lunch',    emoji: '☀️', label: 'Bright midday' },
+  { from: 14, to: 18, moodId: 'social',   foodId: 'coffee',   emoji: '🌤', label: 'Afternoon social' },
+  { from: 18, to: 22, moodId: 'romantic', foodId: 'dinner',   emoji: '🌇', label: 'Golden evening' },
+  { from: 22, to: 29, moodId: 'aesthetic',foodId: 'cocktails',emoji: '🌙', label: 'Late night' },
+];
 
-function getMoodFromTime(hour) {
-  if (hour >= 5  && hour < 10) return { moodId: 'calm',     emoji: '🌅', label: 'Morning energy' };
-  if (hour >= 10 && hour < 14) return { moodId: 'explore',  emoji: '☀️', label: 'Bright midday' };
-  if (hour >= 14 && hour < 18) return { moodId: 'social',   emoji: '🌤', label: 'Afternoon social' };
-  if (hour >= 18 && hour < 22) return { moodId: 'romantic', emoji: '🌇', label: 'Golden evening' };
-  return                               { moodId: 'aesthetic',emoji: '🌙', label: 'Late night' };
+function getSuggestionFromTime(hour) {
+  return TIME_SUGGESTIONS.find((s) => hour >= s.from && hour < (s.to > 24 ? s.to - 24 : s.to))
+    || TIME_SUGGESTIONS[TIME_SUGGESTIONS.length - 1];
 }
 
 async function fetchWeatherSuggestion() {
   const hour = new Date().getHours();
-  const timeBased = getMoodFromTime(hour);
-  const baseMood = MOODS.find((m) => m.id === timeBased.moodId) || MOODS[0];
-  const base = { mood: baseMood, reason: `${timeBased.emoji} ${timeBased.label}` };
+  const timeSugg = getSuggestionFromTime(hour);
+  const baseMood = MOODS.find((m) => m.id === timeSugg.moodId) || MOODS[0];
+  const baseFood = ALL_FOODS.find((f) => f.id === timeSugg.foodId) || null;
+  const base = { mood: baseMood, food: baseFood, reason: `${timeSugg.emoji} ${timeSugg.label}` };
 
   if (!OPENWEATHER_KEY) return base;
   try {
-    // Use actual device location for weather; fall back to SF if denied
-    let lat = FALLBACK_LAT;
-    let lng = FALLBACK_LNG;
+    let lat = FALLBACK_LAT, lng = FALLBACK_LNG;
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status === 'granted') {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      lat = loc.coords.latitude;
-      lng = loc.coords.longitude;
+      lat = loc.coords.latitude; lng = loc.coords.longitude;
     }
-
     const res = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${OPENWEATHER_KEY}`
     );
@@ -76,9 +64,14 @@ async function fetchWeatherSuggestion() {
     const json = await res.json();
     const cityName = json.name || 'your city';
     const weatherMain = json.weather?.[0]?.main || 'Clear';
-    const { moodId, emoji, label } = getMoodFromWeather(weatherMain, hour);
-    const weatherMood = MOODS.find((m) => m.id === moodId) || baseMood;
-    return { mood: weatherMood, reason: `${emoji} ${label} in ${cityName}` };
+    const ws = WEATHER_SUGGESTIONS[weatherMain];
+    if (!ws) return base;
+    const isEvening = hour >= 18 || hour < 5;
+    const pick = ws.any || (isEvening ? ws.evening : ws.day) || ws.evening || ws.day;
+    const wMood = MOODS.find((m) => m.id === pick.moodId) || baseMood;
+    const wFood = ALL_FOODS.find((f) => f.id === pick.foodId) || null;
+    const emoji = json.weather?.[0]?.icon?.includes('d') ? '☀️' : '🌙';
+    return { mood: wMood, food: wFood, reason: `${weatherMain === 'Clear' ? '☀️' : weatherMain === 'Rain' ? '🌧' : '☁️'} ${weatherMain.toLowerCase()} in ${cityName}` };
   } catch {
     return base;
   }
@@ -96,14 +89,25 @@ export default function Onboarding({ navigation }) {
   const { colors, isDark } = useTheme();
   const [step, setStep] = useState('landing');
   const [selectedMood, setSelectedMood] = useState(null);
+  const [selectedFood, setSelectedFood] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useEffect(() => {
     if (step === 'mood') {
       fetchWeatherSuggestion().then(setSuggestion);
+      // Restore last-used food
+      AsyncStorage.getItem('lastFood').then((v) => {
+        if (v) setSelectedFood(JSON.parse(v));
+      });
     }
   }, [step]);
+
+  const handleFoodSelect = (food) => {
+    setSelectedFood(food);
+    if (food) AsyncStorage.setItem('lastFood', JSON.stringify(food));
+    else AsyncStorage.removeItem('lastFood');
+  };
 
   if (step === 'mood') {
     return (
@@ -126,12 +130,17 @@ export default function Onboarding({ navigation }) {
           {suggestion && (
             <Pressable
               style={styles.suggBanner}
-              onPress={() => setSelectedMood(suggestion.mood)}
+              onPress={() => {
+                setSelectedMood(suggestion.mood);
+                if (suggestion.food) handleFoodSelect(suggestion.food);
+              }}
             >
               <View style={styles.suggLeft} />
               <View style={styles.suggBody}>
                 <Text style={styles.suggReason}>{suggestion.reason} · WE'RE FEELING</Text>
-                <Text style={styles.suggMood}>{suggestion.mood.label} →</Text>
+                <Text style={styles.suggMood}>
+                  {suggestion.mood.label}{suggestion.food ? ` + ${suggestion.food.label}` : ''} →
+                </Text>
               </View>
             </Pressable>
           )}
@@ -142,31 +151,50 @@ export default function Onboarding({ navigation }) {
                 <MoodChip mood={mood} selected={selectedMood?.id === mood.id} onPress={setSelectedMood} />
               </View>
             ))}
+            <View style={styles.foodSection}>
+              <Text style={[styles.foodSectionLbl, { color: colors.txt3 }]}>ALSO CRAVING SOMETHING?</Text>
+              <FoodChipRow
+                categories={ALL_FOODS}
+                selected={selectedFood}
+                onSelect={handleFoodSelect}
+                colors={colors}
+              />
+            </View>
             <View style={{ height: 200 }} />
           </ScrollView>
 
-          {selectedMood && (
+          {(selectedMood || selectedFood) && (
             <View style={styles.moodFooter}>
               <View style={styles.selBar}>
                 <Text style={styles.selLbl}>SELECTED</Text>
-                <Text style={styles.selVal}>{selectedMood.label}</Text>
+                <Text style={styles.selVal}>
+                  {selectedMood && selectedFood
+                    ? `${selectedMood.label} · ${selectedFood.label}`
+                    : selectedMood ? selectedMood.label
+                    : selectedFood ? selectedFood.label : ''}
+                </Text>
                 <View style={styles.selDots}>
                   {MOODS.map((m) => (
                     <View
                       key={m.id}
                       style={[
                         styles.selDot,
-                        m.id === selectedMood.id && { backgroundColor: selectedMood.dot, transform: [{ scale: 1.25 }] },
+                        m.id === selectedMood?.id && { backgroundColor: selectedMood.dot, transform: [{ scale: 1.25 }] },
                       ]}
                     />
                   ))}
                 </View>
               </View>
               <Pressable
-                style={[styles.moodBtn, { backgroundColor: selectedMood.dot }]}
-                onPress={() => navigation.navigate('Feed', { mood: selectedMood })}
+                style={[styles.moodBtn, { backgroundColor: selectedMood?.dot || colors.gold }]}
+                onPress={() => navigation.navigate('Feed', { mood: selectedMood, food: selectedFood })}
               >
-                <Text style={styles.moodBtnText}>FIND MY VYBE</Text>
+                <Text style={styles.moodBtnText}>
+                  {selectedMood && selectedFood
+                    ? `FINDING ${selectedMood.label.toUpperCase()} + ${selectedFood.label.toUpperCase()}`
+                    : selectedMood ? `FINDING ${selectedMood.label.toUpperCase()} SPOTS`
+                    : `FINDING ${selectedFood?.label.toUpperCase()} SPOTS`}
+                </Text>
                 <Text style={styles.moodBtnArrow}>→</Text>
               </Pressable>
             </View>
@@ -362,6 +390,8 @@ function makeStyles(colors) {
     moodSub: { fontSize: 11, color: colors.txt2, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 8 },
     moodGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: 8 },
     chipWrap: { width: '47%' },
+    foodSection: { width: '100%', marginTop: 16, paddingBottom: 4 },
+    foodSectionLbl: { fontSize: 9, fontWeight: '700', letterSpacing: 2, paddingHorizontal: 16, marginBottom: 8 },
 
     moodFooter: {
       position: 'absolute', bottom: 0, left: 0, right: 0,

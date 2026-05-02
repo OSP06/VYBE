@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchPlaces, fetchSaved, savePlace, unsavePlace } from '../services/api';
 import { fonts, radius } from '../constants/theme';
+import { FOOD_EMOJI } from '../constants/foods';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,15 +19,15 @@ const PLACE_GRADS = [
 const gradFor = (id) => PLACE_GRADS[(id - 1) % 8];
 
 export default function SeeAll({ navigation, route }) {
-  const { mood, neighborhood, cityId = 1, userLat, userLng, openNow = false } = route.params;
+  const { mood, food = null, neighborhood, cityId = 1, userLat, userLng, openNow = false } = route.params;
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, token } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: places = [], isLoading } = useQuery({
-    queryKey: ['seeAll', mood.id, neighborhood, userLat, userLng, openNow],
-    queryFn: () => fetchPlaces(mood.id, cityId, 60, neighborhood, userLat, userLng, openNow),
+    queryKey: ['seeAll', mood?.id, food?.id, neighborhood, userLat, userLng, openNow],
+    queryFn: () => fetchPlaces(mood?.id ?? null, cityId, 60, neighborhood, userLat, userLng, openNow, null, food?.id ?? null),
   });
 
   const { data: savedPlaces = [] } = useQuery({
@@ -53,7 +54,10 @@ export default function SeeAll({ navigation, route }) {
           <Text style={styles.backTxt}>← BACK</Text>
         </Pressable>
         <View>
-          <Text style={styles.title}>{mood.label.toUpperCase()}</Text>
+          <Text style={styles.title}>
+            {mood ? mood.label.toUpperCase() : food?.label?.toUpperCase() || 'PLACES'}
+            {mood && food ? ` + ${food.label.toUpperCase()}` : ''}
+          </Text>
           {neighborhood && <Text style={styles.sub}>{neighborhood}</Text>}
         </View>
         <View style={{ width: 60 }} />
@@ -89,6 +93,11 @@ export default function SeeAll({ navigation, route }) {
               <View style={styles.cardBody}>
                 <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.cardSub} numberOfLines={1}>{item.neighborhood || ''}</Text>
+                {item.food_tags?.length > 0 && (
+                  <Text style={styles.cardFoodTags} numberOfLines={1}>
+                    {item.food_tags.slice(0, 3).map((t) => `${FOOD_EMOJI[t] || ''}${t}`).join('  ')}
+                  </Text>
+                )}
                 <View style={styles.cardFoot}>
                   <Text style={styles.cardRating}>★ {item.rating.toFixed(1)}</Text>
                   <Text style={styles.cardPrice}>{PRICE[item.price_range]}</Text>
@@ -119,6 +128,7 @@ function makeStyles(colors) {
     cardBody: { padding: 10, gap: 3 },
     cardName: { fontFamily: fonts.display, fontSize: 14, color: colors.txt, letterSpacing: 0.3 },
     cardSub: { fontSize: 10, color: colors.txt3 },
+    cardFoodTags: { fontSize: 9, color: colors.txt3, marginTop: 1 },
     cardFoot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
     cardRating: { fontSize: 10, color: colors.gold, fontWeight: '700' },
     cardPrice: { fontSize: 10, color: colors.txt2 },
