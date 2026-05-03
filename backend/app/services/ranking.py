@@ -197,6 +197,8 @@ def rank_places(
         # Dietary hard filter — exclude places that don't meet the requirement
         if dietary == 'vegetarian' and (not food_row or not food_row.serves_vegetarian):
             continue
+        if dietary in ('halal', 'gluten_free') and (not food_row or not food_row.dietary_tags or dietary not in food_row.dietary_tags):
+            continue
         if vibe is None:
             score = 0.0
         else:

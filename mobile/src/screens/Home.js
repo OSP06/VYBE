@@ -206,16 +206,23 @@ export default function Home({ navigation, route }) {
         <FoodChipRow categories={ALL_FOODS} selected={activeFood} onSelect={handleFoodSelect} colors={colors} />
       </View>
 
-      {/* Dietary restriction chip */}
+      {/* Dietary restriction chips */}
       <View style={styles.dietaryRow}>
-        <Pressable
-          style={[styles.dietaryChip, activeDietary === 'vegetarian' && styles.dietaryChipOn]}
-          onPress={() => setActiveDietary(activeDietary === 'vegetarian' ? null : 'vegetarian')}
-        >
-          <Text style={[styles.dietaryChipTxt, activeDietary === 'vegetarian' && styles.dietaryChipTxtOn]}>
-            🌱 VEG
-          </Text>
-        </Pressable>
+        {[
+          { id: 'vegetarian', label: '🌱 VEG' },
+          { id: 'halal',       label: '☪ HALAL' },
+          { id: 'gluten_free', label: '🌾 GF' },
+        ].map(({ id, label }) => (
+          <Pressable
+            key={id}
+            style={[styles.dietaryChip, activeDietary === id && styles.dietaryChipOn]}
+            onPress={() => setActiveDietary(activeDietary === id ? null : id)}
+          >
+            <Text style={[styles.dietaryChipTxt, activeDietary === id && styles.dietaryChipTxtOn]}>
+              {label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       <View style={styles.rankBadgeRow}>

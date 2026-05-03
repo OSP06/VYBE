@@ -20,3 +20,4 @@ class PlaceFood(Base):
     serves_brunch: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     serves_alcohol: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     serves_vegetarian: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    dietary_tags: Mapped[Optional[list]] = mapped_column(ARRAY(TEXT), nullable=True)
