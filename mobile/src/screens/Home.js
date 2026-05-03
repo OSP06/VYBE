@@ -53,7 +53,12 @@ export default function Home({ navigation, route }) {
     queryKey: ['cities'],
     queryFn: fetchCities,
   });
-  const city = cities[0] || null;
+  const [selectedCity, setSelectedCity] = useState(null);
+  const city = selectedCity || cities[0] || null;
+
+  useEffect(() => {
+    if (cities.length > 0 && !selectedCity) setSelectedCity(cities[0]);
+  }, [cities]);
 
   const { data: neighborhoods = [] } = useQuery({
     queryKey: ['neighborhoods', city?.id],
@@ -62,7 +67,7 @@ export default function Home({ navigation, route }) {
   });
 
   const { data: places = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['places', activeMood?.id, activeFood?.id, activeDietary, neighborhood, userLocation?.lat, nearMeOnly],
+    queryKey: ['places', city?.id, activeMood?.id, activeFood?.id, activeDietary, neighborhood, userLocation?.lat, nearMeOnly],
     queryFn: () => fetchPlaces(
       activeMood?.id ?? null, city?.id ?? 1, 20, neighborhood,
       userLocation?.lat, userLocation?.lng, false,
@@ -126,27 +131,56 @@ export default function Home({ navigation, route }) {
         </View>
       </View>
 
-      {/* Area picker modal */}
+      {/* City + Area picker modal */}
       <Modal visible={showAreaPicker} transparent animationType="fade" onRequestClose={() => setShowAreaPicker(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowAreaPicker(false)}>
           <View style={styles.areaModal}>
-            <Text style={styles.areaModalTitle}>SELECT AREA</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Pressable
-                style={[styles.areaOption, !neighborhood && styles.areaOptionOn]}
-                onPress={() => { setNeighborhood(null); setShowAreaPicker(false); }}
-              >
-                <Text style={[styles.areaOptionTxt, !neighborhood && styles.areaOptionTxtOn]}>All of {city?.name}</Text>
-              </Pressable>
-              {neighborhoods.filter(n => n !== city?.name).map((n) => (
+              {/* ── City section ── */}
+              <Text style={styles.areaModalTitle}>CITY</Text>
+              {cities.map((c) => (
                 <Pressable
-                  key={n}
-                  style={[styles.areaOption, neighborhood === n && styles.areaOptionOn]}
-                  onPress={() => { setNeighborhood(n); setShowAreaPicker(false); }}
+                  key={c.id}
+                  style={[styles.areaOption, city?.id === c.id && styles.areaOptionOn]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSelectedCity(c);
+                    setNeighborhood(null);
+                    setShowAreaPicker(false);
+                  }}
                 >
-                  <Text style={[styles.areaOptionTxt, neighborhood === n && styles.areaOptionTxtOn]}>{n}</Text>
+                  <Text style={[styles.areaOptionTxt, city?.id === c.id && styles.areaOptionTxtOn]}>
+                    {c.name}
+                  </Text>
+                  {city?.id === c.id && <Text style={styles.areaOptionCheck}>✓</Text>}
                 </Pressable>
               ))}
+
+              {/* ── Neighbourhood section ── */}
+              {neighborhoods.filter(n => n !== city?.name).length > 0 && (
+                <>
+                  <Text style={[styles.areaModalTitle, { marginTop: 16 }]}>AREA IN {city?.name?.toUpperCase()}</Text>
+                  <Pressable
+                    style={[styles.areaOption, !neighborhood && styles.areaOptionOn]}
+                    onPress={() => { setNeighborhood(null); setShowAreaPicker(false); }}
+                  >
+                    <Text style={[styles.areaOptionTxt, !neighborhood && styles.areaOptionTxtOn]}>
+                      All of {city?.name}
+                    </Text>
+                    {!neighborhood && <Text style={styles.areaOptionCheck}>✓</Text>}
+                  </Pressable>
+                  {neighborhoods.filter(n => n !== city?.name).map((n) => (
+                    <Pressable
+                      key={n}
+                      style={[styles.areaOption, neighborhood === n && styles.areaOptionOn]}
+                      onPress={() => { setNeighborhood(n); setShowAreaPicker(false); }}
+                    >
+                      <Text style={[styles.areaOptionTxt, neighborhood === n && styles.areaOptionTxtOn]}>{n}</Text>
+                      {neighborhood === n && <Text style={styles.areaOptionCheck}>✓</Text>}
+                    </Pressable>
+                  ))}
+                </>
+              )}
             </ScrollView>
           </View>
         </Pressable>
@@ -266,10 +300,11 @@ function makeStyles(colors) {
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
     areaModal: { backgroundColor: colors.bg, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 20, paddingBottom: 40, maxHeight: '70%' },
     areaModalTitle: { fontFamily: fonts.display, fontSize: 13, color: colors.txt3, letterSpacing: 3, textAlign: 'center', marginBottom: 12 },
-    areaOption: { paddingHorizontal: 24, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border2 },
+    areaOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border2 },
     areaOptionOn: { backgroundColor: colors.sage + '18' },
-    areaOptionTxt: { fontFamily: fonts.display, fontSize: 14, color: colors.txt, letterSpacing: 0.5 },
+    areaOptionTxt: { fontFamily: fonts.display, fontSize: 14, color: colors.txt, letterSpacing: 0.5, flex: 1 },
     areaOptionTxtOn: { color: colors.sage },
+    areaOptionCheck: { fontSize: 13, color: colors.sage, marginLeft: 8 },
 
     // Mood chips — fixed height
     chipRowWrap: { height: 44 },
