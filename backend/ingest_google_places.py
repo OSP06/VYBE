@@ -33,11 +33,7 @@ PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 FIELD_MASK = (
     "places.id,places.displayName,places.rating,places.formattedAddress,"
     "places.location,places.priceLevel,places.photos,places.reviews,"
-    "places.regularOpeningHours,places.businessStatus,places.primaryType,"
-    "places.goodForGroups,places.liveMusic,places.quietPlace,"
-    "places.servesCoffee,places.servesBrunch,places.servesCocktails,"
-    "places.servesBeer,places.servesWine,places.servesLunch,places.servesDinner,"
-    "places.servesVegetarianFood"
+    "places.regularOpeningHours,places.businessStatus,places.primaryType"
 )
 
 PRIMARY_TYPE_TO_CUISINE: dict[str, list[str]] = {
@@ -263,12 +259,6 @@ async def ingest(city_name: str, lat: float, lng: float):
                     opening_hours = raw_hours if isinstance(raw_hours, list) else None
 
                     place_attributes = {
-                        "quietPlace": p.get("quietPlace", False),
-                        "liveMusic": p.get("liveMusic", False),
-                        "goodForGroups": p.get("goodForGroups", False),
-                        "servesCoffee": p.get("servesCoffee", False),
-                        "servesBrunch": p.get("servesBrunch", False),
-                        "servesCocktails": p.get("servesCocktails", False),
                         "priceLevel": p.get("priceLevel", "PRICE_LEVEL_MODERATE"),
                     }
                     business_status = p.get("businessStatus", "OPERATIONAL")
@@ -292,28 +282,28 @@ async def ingest(city_name: str, lat: float, lng: float):
                     )
                     db.add(place)
 
-                    # Food data
+                    # Food data — cuisine_tags from primaryType (serves* booleans deprecated by Google)
                     primary_type = p.get("primaryType", "")
                     cuisine_tags = PRIMARY_TYPE_TO_CUISINE.get(primary_type, []) or None
-                    drink_tags = []
-                    if p.get("servesCocktails"): drink_tags.append("cocktails")
-                    if p.get("servesWine"): drink_tags.append("wine")
-                    if p.get("servesBeer"): drink_tags.append("craft_beer")
-                    meal_types = []
-                    if p.get("servesBrunch"): meal_types.append("brunch")
-                    if p.get("servesLunch"): meal_types.append("lunch")
-                    if p.get("servesDinner"): meal_types.append("dinner")
-                    if p.get("servesCoffee"): meal_types.append("coffee")
+                    # Infer drink/meal tags from primaryType as well
+                    drink_tags = ["cocktails"] if primary_type in ("bar", "cocktail_bar") else (
+                        ["wine"] if primary_type == "wine_bar" else None
+                    )
+                    meal_types = ["coffee"] if primary_type in ("coffee_shop", "cafe", "bakery") else (
+                        ["brunch"] if primary_type == "brunch_restaurant" else None
+                    )
+                    serves_coffee = primary_type in ("coffee_shop", "cafe", "bakery")
+                    serves_alcohol = primary_type in ("bar", "cocktail_bar", "wine_bar")
                     await db.flush()  # get place.id before creating food row
                     food = PlaceFood(
                         place_id=place.id,
                         cuisine_tags=cuisine_tags,
-                        drink_tags=drink_tags or None,
-                        meal_types=meal_types or None,
-                        serves_coffee=bool(p.get("servesCoffee")),
-                        serves_brunch=bool(p.get("servesBrunch")),
-                        serves_alcohol=bool(p.get("servesCocktails") or p.get("servesWine") or p.get("servesBeer")),
-                        serves_vegetarian=bool(p.get("servesVegetarianFood")),
+                        drink_tags=drink_tags,
+                        meal_types=meal_types,
+                        serves_coffee=serves_coffee,
+                        serves_brunch=primary_type == "brunch_restaurant",
+                        serves_alcohol=serves_alcohol,
+                        serves_vegetarian=False,  # not available via API anymore
                     )
                     db.add(food)
 
