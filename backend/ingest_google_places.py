@@ -241,6 +241,13 @@ async def ingest(city_name: str, lat: float, lng: float):
 
                     photos = p.get("photos", [])
                     image_url = build_photo_url(photos[0]["name"]) if photos else None
+                    # Store up to 5 photo redirect URLs for the carousel (no redirect resolution —
+                    # React Native Image handles 302 redirects fine, saving ingest time)
+                    photo_urls = [
+                        f"https://places.googleapis.com/v1/{ph['name']}/media?maxHeightPx=800&key={GOOGLE_API_KEY}"
+                        for ph in photos[:5]
+                        if ph.get("name")
+                    ] or None
 
                     raw_reviews = p.get("reviews", [])
                     snippets = []
@@ -281,6 +288,7 @@ async def ingest(city_name: str, lat: float, lng: float):
                         place_attributes=place_attributes,
                         business_status=business_status,
                         is_active=True,
+                        photos=photo_urls,
                     )
                     db.add(place)
 

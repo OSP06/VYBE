@@ -23,6 +23,7 @@ export default function Home({ navigation, route }) {
   const { user, token } = useAuth();
   const [activeMood, setActiveMood] = useState(route.params.mood || null);
   const [activeFood, setActiveFood] = useState(route.params.food || null);
+  const [activeDietary, setActiveDietary] = useState(null);
   const [neighborhood, setNeighborhood] = useState(null);
   const [showAreaPicker, setShowAreaPicker] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
@@ -61,12 +62,13 @@ export default function Home({ navigation, route }) {
   });
 
   const { data: places = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['places', activeMood?.id, activeFood?.id, neighborhood, userLocation?.lat, nearMeOnly],
+    queryKey: ['places', activeMood?.id, activeFood?.id, activeDietary, neighborhood, userLocation?.lat, nearMeOnly],
     queryFn: () => fetchPlaces(
       activeMood?.id ?? null, city?.id ?? 1, 20, neighborhood,
       userLocation?.lat, userLocation?.lng, false,
       nearMeOnly && userLocation ? 5 : null,
       activeFood?.id ?? null,
+      activeDietary,
     ),
   });
 
@@ -170,6 +172,18 @@ export default function Home({ navigation, route }) {
         <FoodChipRow categories={ALL_FOODS} selected={activeFood} onSelect={handleFoodSelect} colors={colors} />
       </View>
 
+      {/* Dietary restriction chip */}
+      <View style={styles.dietaryRow}>
+        <Pressable
+          style={[styles.dietaryChip, activeDietary === 'vegetarian' && styles.dietaryChipOn]}
+          onPress={() => setActiveDietary(activeDietary === 'vegetarian' ? null : 'vegetarian')}
+        >
+          <Text style={[styles.dietaryChipTxt, activeDietary === 'vegetarian' && styles.dietaryChipTxtOn]}>
+            🌱 VEG
+          </Text>
+        </Pressable>
+      </View>
+
       <View style={styles.rankBadgeRow}>
         <Text style={styles.rankBadgeTxt}>
           {activeMood && activeFood
@@ -264,6 +278,12 @@ function makeStyles(colors) {
     chipOn: { backgroundColor: colors.sage, borderColor: colors.sage },
     chipTxt: { fontFamily: fonts.display, fontSize: 10, color: colors.txt2, letterSpacing: 1 },
     chipTxtOn: { color: '#fff' },
+
+    dietaryRow: { paddingHorizontal: 16, paddingBottom: 4, flexDirection: 'row' },
+    dietaryChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 3, borderWidth: 1, borderColor: colors.border2, backgroundColor: 'transparent' },
+    dietaryChipOn: { backgroundColor: '#4a7c4e', borderColor: '#4a7c4e' },
+    dietaryChipTxt: { fontFamily: fonts.display, fontSize: 9, color: colors.txt3, letterSpacing: 1 },
+    dietaryChipTxtOn: { color: '#fff' },
 
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
     loadingTxt: { fontSize: 12, color: colors.txt3, fontFamily: fonts.body },

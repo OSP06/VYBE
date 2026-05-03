@@ -30,6 +30,7 @@ class Place(Base):
     review_snippets: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     opening_hours: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     place_attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    photos: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     business_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 

@@ -63,6 +63,32 @@ FOOD_RELATIVES: dict[str, list[str]] = {
 }
 
 
+_VIBE_DESC: dict[str, str] = {
+    "calm": "quiet and relaxed",
+    "aesthetic": "visually distinctive",
+    "lively": "energetic atmosphere",
+    "social": "great for groups",
+    "premium": "upscale feel",
+    "budget": "easy on the wallet",
+    "work_friendly": "ideal for working",
+    "date_friendly": "perfect for dates",
+}
+
+
+def generate_explanation(vibe_vector: dict | None, mood: str | None, food: str | None) -> str:
+    if not vibe_vector:
+        return ""
+    top = sorted(vibe_vector.items(), key=lambda x: x[1], reverse=True)[:2]
+    desc = " · ".join(_VIBE_DESC.get(k, k) for k, _ in top if k in _VIBE_DESC)
+    parts = []
+    if mood:
+        parts.append(mood.upper())
+    if food:
+        parts.append(food.upper())
+    prefix = " + ".join(parts) if parts else "VYBE PICK"
+    return f"Ranked for {prefix} — {desc}."
+
+
 def compute_food_match(food_tags: list | None, food_id: str | None) -> float:
     if not food_tags or not food_id:
         return 0.0
@@ -151,6 +177,7 @@ def rank_places(
     feedback: Optional[dict] = None,
     max_distance_km: Optional[float] = None,
     food: Optional[str] = None,
+    dietary: Optional[str] = None,
 ) -> list:
     """
     feedback: {place_id: felt_right (bool)} — personalises scores based on
@@ -167,6 +194,9 @@ def rank_places(
         if max_distance_km is not None and user_lat is not None and user_lng is not None:
             if _distance_km(user_lat, user_lng, place.lat, place.lng) > max_distance_km:
                 continue
+        # Dietary hard filter — exclude places that don't meet the requirement
+        if dietary == 'vegetarian' and (not food_row or not food_row.serves_vegetarian):
+            continue
         if vibe is None:
             score = 0.0
         else:

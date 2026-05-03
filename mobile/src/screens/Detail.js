@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, Pressable,
   ActivityIndicator, SafeAreaView, StatusBar,
-  Linking, Platform, Animated,
+  Linking, Platform, Animated, ScrollView, Image,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import FadeImage from '../components/FadeImage';
@@ -187,6 +187,26 @@ export default function Detail({ navigation, route }) {
         <View style={styles.heroSpacer} />
         <View style={styles.detSheetInner}>
           <View style={styles.detPill} />
+
+          {/* Photo carousel — shown only when place has multiple photos */}
+          {place.photos?.length > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.carousel}
+              contentContainerStyle={styles.carouselContent}
+            >
+              {place.photos.map((url, i) => (
+                <Image
+                  key={i}
+                  source={{ uri: url }}
+                  style={styles.carouselImg}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          )}
+
           <View style={styles.detBody}>
             <Text style={styles.detName}>{place.name}</Text>
             <View style={styles.detMeta}>
@@ -258,6 +278,12 @@ export default function Detail({ navigation, route }) {
                     </Text>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {place.explanation && (
+              <View style={styles.explanationBox}>
+                <Text style={styles.explanationTxt}>✦ {place.explanation}</Text>
               </View>
             )}
 
@@ -387,6 +413,17 @@ function makeStyles(colors, isDark) {
     allHoursRow: { flexDirection: 'row', justifyContent: 'space-between' },
     allHoursDay: { fontSize: 10, fontWeight: '600', color: colors.txt3, width: 36 },
     allHoursTime: { fontSize: 10, color: colors.txt2 },
+
+    carousel: { height: 130, marginBottom: 4 },
+    carouselContent: { paddingHorizontal: 16, gap: 6, alignItems: 'center' },
+    carouselImg: { width: 180, height: 120, borderRadius: 8 },
+
+    explanationBox: {
+      marginTop: 10, paddingHorizontal: 10, paddingVertical: 7,
+      backgroundColor: colors.gold + '14', borderRadius: 4,
+      borderLeftWidth: 2, borderLeftColor: colors.gold,
+    },
+    explanationTxt: { fontSize: 10, color: colors.txt2, fontStyle: 'italic', lineHeight: 15 },
 
     detChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 9 },
     dChip: { backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 3 },

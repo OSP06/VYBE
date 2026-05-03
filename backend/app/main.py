@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.v1 import auth, cities, places, saves, users, vibe_check
+from app.api.v1 import admin, auth, cities, places, saves, users, vibe_check
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_setup import configure_logging
@@ -33,6 +33,7 @@ app.add_middleware(
     allow_credentials=True,
 )
 
+app.include_router(admin.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(places.router, prefix="/api/v1")
 app.include_router(saves.router, prefix="/api/v1")

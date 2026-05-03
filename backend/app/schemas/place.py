@@ -39,6 +39,8 @@ class PlaceSchema(BaseModel):
     vibe: Optional[PlaceVibeSchema] = None
     score: Optional[float] = None
     food_tags: Optional[list] = None
+    photos: Optional[list] = None
+    explanation: Optional[str] = None
 
 
 class CitySchema(BaseModel):

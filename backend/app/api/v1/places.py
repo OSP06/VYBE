@@ -9,7 +9,7 @@ from app.core.security import decode_token
 from app.db.base import get_db
 from app.db.models import Place, PlaceFood, PlaceVibe, VibeFeedback
 from app.schemas.place import PlaceSchema, PlaceVibeSchema
-from app.services.ranking import is_open_now, rank_places
+from app.services.ranking import generate_explanation, is_open_now, rank_places
 
 router = APIRouter()
 
@@ -36,7 +36,10 @@ def _food_tags(food_row: Optional[PlaceFood]) -> list[str]:
     return list(dict.fromkeys(tags))  # dedupe, preserve order
 
 
-def _build_place_schema(place, vibe, food_row, score):
+def _build_place_schema(place, vibe, food_row, score, mood=None, food=None):
+    explanation = generate_explanation(
+        vibe.vibe_vector if vibe else None, mood, food
+    ) if (mood or food) else None
     return PlaceSchema(
         id=place.id,
         name=place.name,
@@ -51,6 +54,8 @@ def _build_place_schema(place, vibe, food_row, score):
         vibe=PlaceVibeSchema.model_validate(vibe) if vibe else None,
         score=score,
         food_tags=_food_tags(food_row) or None,
+        photos=place.photos or None,
+        explanation=explanation,
     )
 
 
@@ -67,6 +72,7 @@ async def get_places(
     city_id: int,
     mood: Optional[str] = None,
     food: Optional[str] = None,
+    dietary: Optional[str] = None,
     limit: int = 30,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
@@ -101,7 +107,7 @@ async def get_places(
     ranked = [
         r for r in rank_places(
             rows, mood, user_lat=lat, user_lng=lng,
-            feedback=feedback, max_distance_km=max_distance_km, food=food,
+            feedback=feedback, max_distance_km=max_distance_km, food=food, dietary=dietary,
         )
         if r[2] >= (0.25 if not food else 0.0)
     ]
@@ -114,14 +120,14 @@ async def get_places(
         ranked = [
             r for r in rank_places(
                 rows, mood, user_lat=lat, user_lng=lng,
-                feedback=feedback, max_distance_km=max_distance_km, food=None,
+                feedback=feedback, max_distance_km=max_distance_km, food=None, dietary=dietary,
             )
             if r[2] >= 0.25
         ]
         if open_now:
             ranked = [r for r in ranked if is_open_now(r[0].opening_hours)]
 
-    return [_build_place_schema(place, vibe, food_row, score) for place, vibe, food_row, score in ranked[:limit]]
+    return [_build_place_schema(place, vibe, food_row, score, mood=mood, food=food) for place, vibe, food_row, score in ranked[:limit]]
 
 
 @router.get("/places/{place_id}", response_model=PlaceSchema)
@@ -136,4 +142,4 @@ async def get_place(place_id: int, db: AsyncSession = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Place not found")
     place, vibe, food_row = row
-    return _build_place_schema(place, vibe, food_row, None)
+    return _build_place_schema(place, vibe, food_row, None, mood=None, food=None)
