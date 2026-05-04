@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchPlaces, fetchCities, fetchNeighborhoods, savePlace, unsavePlace, fetchSaved } from '../services/api';
+import { fetchPlaces, fetchCities, fetchNeighborhoods, fetchFoodTags, savePlace, unsavePlace, fetchSaved } from '../services/api';
 import { fonts, radius } from '../constants/theme';
 import { MOODS } from '../constants/moods';
 import { ALL_FOODS } from '../constants/foods';
@@ -65,6 +65,22 @@ export default function Home({ navigation, route }) {
     queryFn: () => fetchNeighborhoods(city?.id ?? 1),
     enabled: !!city,
   });
+
+  const { data: availableFoodTags = [] } = useQuery({
+    queryKey: ['food-tags', city?.id],
+    queryFn: () => fetchFoodTags(city?.id ?? 1),
+    enabled: !!city,
+  });
+
+  const availableFoods = availableFoodTags.length > 0
+    ? ALL_FOODS.filter(f => availableFoodTags.includes(f.id))
+    : ALL_FOODS;
+
+  useEffect(() => {
+    if (activeFood && availableFoodTags.length > 0 && !availableFoodTags.includes(activeFood.id)) {
+      setActiveFood(null);
+    }
+  }, [availableFoodTags]);
 
   const { data: places = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['places', city?.id, activeMood?.id, activeFood?.id, activeDietary, neighborhood, userLocation?.lat, nearMeOnly],
@@ -203,7 +219,7 @@ export default function Home({ navigation, route }) {
 
       {/* Food chip row */}
       <View style={styles.chipRowWrap}>
-        <FoodChipRow categories={ALL_FOODS} selected={activeFood} onSelect={handleFoodSelect} colors={colors} />
+        <FoodChipRow categories={availableFoods} selected={activeFood} onSelect={handleFoodSelect} colors={colors} />
       </View>
 
       {/* Dietary restriction chips */}

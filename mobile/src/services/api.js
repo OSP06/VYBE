@@ -45,6 +45,11 @@ export const fetchPlaces = async (mood, cityId = 1, limit = 30, neighborhood = n
   return res.data;
 };
 
+export const fetchFoodTags = async (cityId = 1) => {
+  const res = await api.get(`/api/v1/food-tags?city_id=${cityId}`);
+  return res.data;
+};
+
 export const fetchNeighborhoods = async (cityId = 1) => {
   const res = await api.get(`/api/v1/neighborhoods?city_id=${cityId}`);
   return res.data;

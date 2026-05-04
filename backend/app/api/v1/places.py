@@ -59,6 +59,29 @@ def _build_place_schema(place, vibe, food_row, score, mood=None, food=None):
     )
 
 
+@router.get("/food-tags")
+async def get_food_tags(city_id: int, db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(PlaceFood)
+        .join(Place, Place.id == PlaceFood.place_id)
+        .where(Place.city_id == city_id)
+        .where(Place.is_active == True)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    tags: set[str] = set()
+    for food_row in rows:
+        for t in (food_row.cuisine_tags or []):
+            tags.add(t)
+        for t in (food_row.drink_tags or []):
+            tags.add(t)
+        for t in (food_row.meal_types or []):
+            tags.add(t)
+        if food_row.serves_coffee:  tags.add('coffee')
+        if food_row.serves_brunch:  tags.add('brunch')
+        if food_row.serves_alcohol: tags.update(['cocktails', 'wine', 'craft_beer'])
+    return sorted(tags)
+
+
 @router.get("/neighborhoods")
 async def get_neighborhoods(city_id: int, db: AsyncSession = Depends(get_db)):
     stmt = select(Place.neighborhood).where(Place.city_id == city_id).where(Place.neighborhood.isnot(None)).distinct()
