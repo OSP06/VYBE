@@ -37,13 +37,6 @@ ATMOSPHERE_KEYWORDS = [
     'intimate', 'spacious', 'airy', 'warm', 'cool', 'aesthetic',
 ]
 
-ATTRIBUTE_BOOSTS = {
-    "quietPlace":      {"calm": 0.2,  "work_friendly": 0.15},
-    "liveMusic":       {"lively": 0.25, "social": 0.15},
-    "goodForGroups":   {"social": 0.2},
-    "servesCocktails": {"social": 0.1, "date_friendly": 0.1},
-}
-
 PRICE_BOOSTS = {
     "PRICE_LEVEL_FREE":          {"budget": 0.25},
     "PRICE_LEVEL_INEXPENSIVE":   {"budget": 0.25},
@@ -76,14 +69,10 @@ def quality_score(review: dict) -> float:
     return len(words) * (1.5 if mentions else 1.0)
 
 
-def apply_attribute_boosts(vibe_vector: dict, place_attributes: dict | None) -> dict:
+def apply_price_boost(vibe_vector: dict, place_attributes: dict | None) -> dict:
     if not place_attributes:
         return vibe_vector
     v = dict(vibe_vector)
-    for attr, boosts in ATTRIBUTE_BOOSTS.items():
-        if place_attributes.get(attr):
-            for dim, boost in boosts.items():
-                v[dim] = min(1.0, v.get(dim, 0.0) + boost)
     price = place_attributes.get("priceLevel", "")
     for dim, boost in PRICE_BOOSTS.get(price, {}).items():
         v[dim] = min(1.0, v.get(dim, 0.0) + boost)
@@ -184,8 +173,7 @@ async def main(regenerate: bool):
             try:
                 data = await get_vibe(client, place)
 
-                # Apply structured attribute boosts on top of GPT scores
-                boosted_vector = apply_attribute_boosts(data["vibe_vector"], place.place_attributes)
+                boosted_vector = apply_price_boost(data["vibe_vector"], place.place_attributes)
 
                 vibe = PlaceVibe(
                     place_id=place.id,

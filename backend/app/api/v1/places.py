@@ -127,26 +127,19 @@ async def get_places(
         )).all()
         feedback = {r.place_id: r.felt_right for r in fb_rows}
 
-    ranked = [
-        r for r in rank_places(
-            rows, mood, user_lat=lat, user_lng=lng,
-            feedback=feedback, max_distance_km=max_distance_km, food=food, dietary=dietary,
-        )
-        if r[3] >= (0.25 if not food else 0.0)
-    ]
+    food_ranked, nofood_ranked = rank_places(
+        rows, mood, user_lat=lat, user_lng=lng,
+        feedback=feedback, max_distance_km=max_distance_km, food=food, dietary=dietary,
+    )
+
+    ranked = [r for r in food_ranked if r[3] >= (0.25 if not food else 0.0)]
 
     if open_now:
         ranked = [r for r in ranked if is_open_now(r[0].opening_hours)]
 
-    # Food fallback: if mood+food yields < 3 results, retry with mood only
+    # Food fallback: if mood+food yields < 3 results, use pre-computed nofood list
     if food and len(ranked) < 3:
-        ranked = [
-            r for r in rank_places(
-                rows, mood, user_lat=lat, user_lng=lng,
-                feedback=feedback, max_distance_km=max_distance_km, food=None, dietary=dietary,
-            )
-            if r[3] >= 0.25
-        ]
+        ranked = [r for r in nofood_ranked if r[3] >= 0.25]
         if open_now:
             ranked = [r for r in ranked if is_open_now(r[0].opening_hours)]
 

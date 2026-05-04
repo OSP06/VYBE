@@ -45,23 +45,40 @@ NEUTRAL_MOOD_VECTOR = {
 }
 
 FOOD_RELATIVES: dict[str, list[str]] = {
-    "ramen":        ["japanese", "noodles"],
-    "sushi":        ["japanese", "seafood"],
-    "korean":       ["asian", "bbq"],
-    "italian":      ["pizza", "pasta"],
-    "cocktails":    ["wine", "craft_beer"],
-    "wine":         ["cocktails", "natural_wine"],
-    "craft_beer":   ["cocktails"],
-    "coffee":       ["brunch", "breakfast"],
-    "brunch":       ["coffee", "breakfast"],
-    "american":     ["sandwiches", "burgers"],
-    "sandwiches":   ["american"],
-    "dessert":      ["coffee", "brunch"],
-    "mediterranean":["italian"],
-    "thai":         ["asian"],
-    "indian":       ["asian"],
+    "ramen":         ["japanese", "noodles"],
+    "sushi":         ["japanese", "seafood"],
+    "korean":        ["asian", "bbq"],
+    "italian":       ["pizza", "pasta"],
+    "cocktails":     ["wine", "craft_beer"],
+    "wine":          ["cocktails", "natural_wine"],
+    "craft_beer":    ["cocktails"],
+    "coffee":        ["brunch", "breakfast"],
+    "brunch":        ["coffee", "breakfast"],
+    "american":      ["sandwiches", "burgers"],
+    "sandwiches":    ["american"],
+    "dessert":       ["coffee", "brunch"],
+    "mediterranean": ["italian"],
+    "thai":          ["asian"],
+    "indian":        ["asian"],
 }
 
+# Ideal price tier per mood (1=budget … 4=very expensive)
+MOOD_PRICE_PREF: dict[str, int] = {
+    'budget_chill': 1, 'focus': 1, 'calm': 2, 'social': 2,
+    'energetic': 2, 'explore': 2, 'aesthetic': 3, 'romantic': 3,
+}
+
+# Crowd types that feel right for each mood
+MOOD_CROWD_PREF: dict[str, list[str]] = {
+    'romantic':     ['couples'],
+    'social':       ['mixed', 'students'],
+    'focus':        ['professionals', 'students'],
+    'calm':         ['professionals', 'locals'],
+    'aesthetic':    ['mixed', 'couples'],
+    'energetic':    ['students', 'mixed'],
+    'explore':      ['locals', 'tourists'],
+    'budget_chill': ['students', 'locals'],
+}
 
 _VIBE_DESC: dict[str, str] = {
     "calm": "quiet and relaxed",
@@ -111,21 +128,19 @@ def _cosine(mood_vec: dict, place_vec: dict) -> float:
 
 
 def _time_adjust(vibe_vec: dict, hour: int) -> dict:
-    """Boost/dampen a place's vibe dimensions based on time of day.
-    Applied to the place vector, not the mood vector — reflects how the place
-    actually feels at this hour (a cafe IS calmer at 9am, livelier at 9pm)."""
+    """Boost/dampen a place's vibe dimensions based on time of day."""
     adj = dict(vibe_vec)
     if 5 <= hour < 11:  # morning
-        adj['calm']          = min(1.0, adj.get('calm', 0) * 1.25)
-        adj['work_friendly'] = min(1.0, adj.get('work_friendly', 0) * 1.2)
-        adj['lively']        = adj.get('lively', 0) * 0.75
-        adj['social']        = adj.get('social', 0) * 0.85
+        adj['calm']          = min(1.0, adj.get('calm', 0) * 1.15)
+        adj['work_friendly'] = min(1.0, adj.get('work_friendly', 0) * 1.12)
+        adj['lively']        = adj.get('lively', 0) * 0.85
+        adj['social']        = adj.get('social', 0) * 0.90
     elif hour >= 18 or hour < 3:  # evening / late night
-        adj['social']        = min(1.0, adj.get('social', 0) * 1.25)
-        adj['lively']        = min(1.0, adj.get('lively', 0) * 1.25)
-        adj['date_friendly'] = min(1.0, adj.get('date_friendly', 0) * 1.2)
-        adj['calm']          = adj.get('calm', 0) * 0.8
-        adj['work_friendly'] = adj.get('work_friendly', 0) * 0.7
+        adj['social']        = min(1.0, adj.get('social', 0) * 1.15)
+        adj['lively']        = min(1.0, adj.get('lively', 0) * 1.15)
+        adj['date_friendly'] = min(1.0, adj.get('date_friendly', 0) * 1.12)
+        adj['calm']          = adj.get('calm', 0) * 0.88
+        adj['work_friendly'] = adj.get('work_friendly', 0) * 0.80
     # midday (11–18): no adjustment — baseline vibe vector is most accurate
     return adj
 
@@ -178,64 +193,110 @@ def rank_places(
     max_distance_km: Optional[float] = None,
     food: Optional[str] = None,
     dietary: Optional[str] = None,
-) -> list:
+) -> tuple[list, list]:
     """
+    Returns (results, results_nofood):
+      results       — food-filtered ranked list
+      results_nofood — same scores but without food filter (used as fallback)
+
     feedback: {place_id: felt_right (bool)} — personalises scores based on
     the user's past vibe-check votes for this mood.
-    felt_right=True  → +0.08 (they loved the vibe match)
-    felt_right=False → -0.08 (the vibe didn't feel right)
     """
     mood_key = mood.lower().replace(" ", "_") if mood else None
     mood_vec = MOOD_VECTORS.get(mood_key, NEUTRAL_MOOD_VECTOR) if mood_key else NEUTRAL_MOOD_VECTOR
     current_hour = hour if hour is not None else datetime.now().hour
     fb = feedback or {}
-    results = []
+    dow = datetime.now().weekday()  # 0=Mon … 6=Sun
+    is_weekend = dow >= 5
+
+    results: list = []
+    results_nofood: list = []
+
     for place, vibe, food_row in rows:
         if max_distance_km is not None and user_lat is not None and user_lng is not None:
             if _distance_km(user_lat, user_lng, place.lat, place.lng) > max_distance_km:
                 continue
-        # Dietary hard filter — exclude places that don't meet the requirement
+
+        # Dietary hard filter
         if dietary == 'vegetarian' and (not food_row or not food_row.serves_vegetarian):
             continue
-        if dietary in ('halal', 'gluten_free') and (not food_row or not food_row.dietary_tags or dietary not in food_row.dietary_tags):
+        if dietary in ('halal', 'gluten_free') and (
+            not food_row or not food_row.dietary_tags or dietary not in food_row.dietary_tags
+        ):
             continue
+
         if vibe is None:
             score = 0.0
+            food_match = 0.0
         else:
             adjusted_vec = _time_adjust(vibe.vibe_vector, current_hour)
             vm = _cosine(mood_vec, adjusted_vec)
-            rating_norm = place.rating / 5.0
-            price_fit = 1.0 - abs(place.price_range - 2) / 4.0
-            score = 0.55 * vm + 0.20 * rating_norm + 0.15 * vibe.hype_score + 0.10 * price_fit
+
+            # Rating normalized across realistic Google range (3.5–5.0)
+            rating_norm = max(0.0, min(1.0, (place.rating - 3.5) / 1.5))
+
+            # Mood-aware price fit
+            ideal_price = MOOD_PRICE_PREF.get(mood_key, 2)
+            price_fit = max(0.0, 1.0 - abs(place.price_range - ideal_price) / 3.0)
+
+            # Distance normalized to [0, 1]
             if user_lat is not None and user_lng is not None:
                 dist = _distance_km(user_lat, user_lng, place.lat, place.lng)
-                score += 0.10 * (1.0 / (1.0 + dist))
+                dist_score = 1.0 / (1.0 + dist)
+            else:
+                dist_score = 0.5
+
+            # Coherent weight budget — sums to 1.0 before boosts
+            score = (0.50 * vm
+                     + 0.20 * rating_norm
+                     + 0.15 * vibe.hype_score
+                     + 0.10 * dist_score
+                     + 0.05 * price_fit)
+
+            # Feedback personalisation
             if place.id in fb:
-                score += 0.08 if fb[place.id] else -0.08
+                score += 0.06 if fb[place.id] else -0.06
 
-            # Food match boost — multiplicative so vibe quality still matters
-            if food:
-                food_tags = []
-                if food_row:
-                    food_tags = (food_row.cuisine_tags or []) + (food_row.drink_tags or []) + (food_row.meal_types or [])
-                    if food_row.serves_coffee: food_tags.append("coffee")
-                    if food_row.serves_brunch: food_tags.append("brunch")
-                    if food_row.serves_alcohol: food_tags.extend(["cocktails", "wine", "craft_beer"])
-                score *= 1.0 + 0.4 * compute_food_match(food_tags, food)
+            # Crowd-type soft boost
+            if vibe.crowd and mood_key:
+                if vibe.crowd in MOOD_CROWD_PREF.get(mood_key, []):
+                    score += 0.04
 
-            # Overhype penalty — tourist-trap places with high review volume
-            # hurt quiet-mood users most; dampen them for calm/focus/romantic
-            if mood_key and mood_key in ('calm', 'focus', 'romantic') and vibe.hype_score > 0.8:
+            # Overhype penalty for quiet moods
+            if mood_key in ('calm', 'focus', 'romantic') and vibe.hype_score > 0.8:
                 score *= 0.88
 
-            # Day-of-week context — same place feels different on a Tuesday vs Saturday
-            dow = datetime.now().weekday()  # 0=Mon … 6=Sun
-            is_weekend = dow >= 5
-            if mood_key and mood_key == 'social' and is_weekend:
-                score *= 1.12
-            elif mood_key and mood_key == 'focus' and not is_weekend:
-                score *= 1.08
+            # Day-of-week context
+            if mood_key == 'social' and is_weekend:
+                score *= 1.10
+            elif mood_key == 'focus' and not is_weekend:
+                score *= 1.06
 
-        results.append((place, vibe, food_row, round(score, 4)))
+            # Collect food tags for match calculation
+            food_tags: list[str] = []
+            if food_row:
+                food_tags = (
+                    (food_row.cuisine_tags or [])
+                    + (food_row.drink_tags or [])
+                    + (food_row.meal_types or [])
+                )
+                if food_row.serves_coffee: food_tags.append("coffee")
+                if food_row.serves_brunch: food_tags.append("brunch")
+                if food_row.serves_alcohol: food_tags.extend(["cocktails", "wine", "craft_beer"])
+
+            food_match = compute_food_match(food_tags, food) if food else 0.0
+
+        # No-food score (used for fallback list) — clamped before storing
+        results_nofood.append((place, vibe, food_row, round(min(1.0, score), 4)))
+
+        # Food-boosted score
+        if food:
+            boosted = min(1.0, score * (1.0 + 0.4 * food_match))
+        else:
+            boosted = min(1.0, score)
+
+        results.append((place, vibe, food_row, round(boosted, 4)))
+
     results.sort(key=lambda x: x[3], reverse=True)
-    return results
+    results_nofood.sort(key=lambda x: x[3], reverse=True)
+    return results, results_nofood
