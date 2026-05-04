@@ -109,7 +109,7 @@ async def get_places(
             rows, mood, user_lat=lat, user_lng=lng,
             feedback=feedback, max_distance_km=max_distance_km, food=food, dietary=dietary,
         )
-        if r[2] >= (0.25 if not food else 0.0)
+        if r[3] >= (0.25 if not food else 0.0)
     ]
 
     if open_now:
@@ -122,7 +122,7 @@ async def get_places(
                 rows, mood, user_lat=lat, user_lng=lng,
                 feedback=feedback, max_distance_km=max_distance_km, food=None, dietary=dietary,
             )
-            if r[2] >= 0.25
+            if r[3] >= 0.25
         ]
         if open_now:
             ranked = [r for r in ranked if is_open_now(r[0].opening_hours)]

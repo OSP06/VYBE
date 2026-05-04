@@ -237,5 +237,5 @@ def rank_places(
                 score *= 1.08
 
         results.append((place, vibe, food_row, round(score, 4)))
-    results.sort(key=lambda x: x[2], reverse=True)
+    results.sort(key=lambda x: x[3], reverse=True)
     return results
