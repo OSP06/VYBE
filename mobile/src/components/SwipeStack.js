@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { fonts, radius } from '../constants/theme';
 import FadeImage from './FadeImage';
+import { FOOD_EMOJI } from '../constants/foods';
 
 const MOOD_DIMS = {
   calm:         ['calm', 'work_friendly', 'aesthetic'],
@@ -220,13 +221,26 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
             {place.vibe?.summary ? (
               <Text style={[styles.cardSummary, { color: colors.txt2 }]} numberOfLines={2}>{place.vibe.summary}</Text>
             ) : null}
-            {place.vibe?.vibe_vector ? (
-              <View style={styles.cardChips}>
-                {topVibes(place.vibe.vibe_vector, 2).map((v) => (
-                  <View key={v} style={[styles.cardChip, { borderColor: colors.border, backgroundColor: colors.glass }]}>
-                    <Text style={[styles.cardChipTxt, { color: colors.txt2 }]}>{v}</Text>
+            {(place.vibe?.vibe_vector || place.food_tags?.length) ? (
+              <View style={styles.cardTagBlock}>
+                {place.vibe?.vibe_vector && (
+                  <View style={styles.cardChips}>
+                    {topVibes(place.vibe.vibe_vector, 2).map((v) => (
+                      <View key={v} style={[styles.cardChip, { backgroundColor: colors.sage + '22', borderColor: colors.sage + '55' }]}>
+                        <Text style={[styles.cardChipTxt, { color: colors.sage }]}>· {v}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
+                )}
+                {place.food_tags?.length > 0 && (
+                  <View style={styles.cardChips}>
+                    {place.food_tags.slice(0, 2).map((tag) => (
+                      <View key={tag} style={[styles.cardChip, { backgroundColor: colors.gold + '18', borderColor: colors.gold + '55' }]}>
+                        <Text style={[styles.cardChipTxt, { color: colors.gold }]}>{FOOD_EMOJI[tag] || '🍽'} {tag.toUpperCase()}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             ) : null}
           </View>
@@ -307,7 +321,8 @@ function makeStyles(colors) {
     cardMatchReason: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
     cardNeighborhood: { fontSize: 11, color: '#999' },
     cardSummary: { fontSize: 11, lineHeight: 16 },
-    cardChips: { flexDirection: 'row', gap: 5, marginTop: 2 },
+    cardTagBlock: { gap: 5, marginTop: 2 },
+    cardChips: { flexDirection: 'row', gap: 5 },
     cardChip: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 3, borderWidth: 1 },
     cardChipTxt: { fontSize: 9, fontWeight: '600', letterSpacing: 0.5 },
 

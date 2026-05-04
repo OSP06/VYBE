@@ -17,8 +17,8 @@ export default function FoodChipRow({ categories, selected, onSelect, colors }) 
             key={item.id}
             style={[
               styles.chip,
-              { borderColor: isOn ? colors.gold : colors.border2 },
-              isOn && { backgroundColor: colors.gold },
+              { borderColor: isOn ? colors.sage : colors.border2 },
+              isOn && { backgroundColor: colors.sage },
             ]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -38,9 +38,9 @@ const styles = StyleSheet.create({
   row: { paddingHorizontal: 16, gap: 6, alignItems: 'center', paddingVertical: 2 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 11, paddingVertical: 6,
+    paddingHorizontal: 14, paddingVertical: 7,
     borderRadius: 3, borderWidth: 1,
   },
   chipEmoji: { fontSize: 12 },
-  chipTxt: { fontFamily: fonts.display, fontSize: 9, letterSpacing: 1 },
+  chipTxt: { fontFamily: fonts.display, fontSize: 10, letterSpacing: 1 },
 });

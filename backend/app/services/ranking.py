@@ -236,6 +236,6 @@ def rank_places(
             elif mood_key and mood_key == 'focus' and not is_weekend:
                 score *= 1.08
 
-        results.append((place, vibe, round(score, 4)))
+        results.append((place, vibe, food_row, round(score, 4)))
     results.sort(key=lambda x: x[2], reverse=True)
     return results
