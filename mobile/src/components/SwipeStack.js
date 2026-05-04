@@ -219,7 +219,7 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
               <Text style={[styles.cardNeighborhood, { color: colors.txt3 }]} numberOfLines={1}>📍 {place.neighborhood}</Text>
             ) : null}
             {place.vibe?.summary ? (
-              <Text style={[styles.cardSummary, { color: colors.txt2 }]} numberOfLines={2}>{place.vibe.summary}</Text>
+              <Text style={[styles.cardSummary, { color: colors.txt2 }]} numberOfLines={1}>{place.vibe.summary}</Text>
             ) : null}
             {(place.vibe?.vibe_vector || place.food_tags?.length) ? (
               <View style={styles.cardTagBlock}>
@@ -256,7 +256,7 @@ export default function SwipeStack({ places, onSeeAll, onPress, savedIds, onSave
             <View style={{ alignItems: 'flex-end', gap: 2 }}>
               <Text style={[styles.cardPrice, { color: colors.txt2 }]}>{PRICE[place.price_range]}</Text>
               {place.score >= 0.55 ? (
-                <Text style={[styles.cardMatch, { color: colors.sage }]}>{Math.round(place.score * 100)}% VIBE MATCH</Text>
+                <Text style={[styles.cardMatch, { color: colors.sage }]}>{Math.min(100, Math.round(place.score * 100))}% VIBE MATCH</Text>
               ) : null}
             </View>
           </View>
@@ -316,7 +316,7 @@ function makeStyles(colors) {
     ratingTxt: { fontSize: 11, fontWeight: '700' },
 
     cardBody: { flex: 1, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, justifyContent: 'space-between' },
-    cardTop: { flex: 1, gap: 5, overflow: 'hidden' },
+    cardTop: { flex: 1, gap: 5 },
     cardName: { fontFamily: fonts.display, fontSize: 23, letterSpacing: 0.3, lineHeight: 25 },
     cardMatchReason: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
     cardNeighborhood: { fontSize: 11, color: '#999' },
